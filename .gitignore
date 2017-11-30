@@ -1,0 +1,7 @@
+_vm/
+_debug/
+img/
+*.tmp
+*.sln
+*.vcxproj
+*.vcxproj.filters

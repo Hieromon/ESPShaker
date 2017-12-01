@@ -1,28 +1,18 @@
-language: c
-env:
-  - BD=esp8266:esp8266:nodemcuv2:CpuFrequency=80,FlashSize=4M3M
-before_install:
-  - "/sbin/start-stop-daemon --start --quiet --pidfile /tmp/custom_xvfb_1.pid --make-pidfile --background --exec /usr/bin/Xvfb -- :1 -ac -screen 0 1280x1024x16"
-  - sleep 3
-  - export DISPLAY=:1.0
-  - wget http://downloads.arduino.cc/arduino-1.8.2-linux64.tar.xz
-  - tar xf arduino-1.8.2-linux64.tar.xz
-  - sudo mv arduino-1.8.2 /usr/local/share/arduino
-  - sudo ln -s /usr/local/share/arduino/arduino /usr/local/bin/arduino
-install:
-  - ln -s $PWD /usr/local/share/arduino/libraries/
-  - arduino --pref "boardsmanager.additional.urls=http://arduino.esp8266.com/stable/package_esp8266com_index.json" --save-prefs
-  - arduino --install-boards esp8266:esp8266
-  - arduino --board $BD --save-prefs
-  - arduino --pref "compiler.warning_level=all" --save-prefs
-  - arduino --install-library "PsuedoPWM"
-  - arduino --install-library "PageBuilder"
-script:
-  #Download PsuedoPWM library from github and install it from downloaded zip
-  #Download PageBuilder library from github and install it from downloaded zip
- - arduino --verify --board $BD $PWD/ESPShaker.ino
+language: python
+python:
+    - "2.7"
 
-notifications:
-  email:
-    on_success: change
-    on_failure: change
+sudo: false
+cache:
+    directories:
+        - "~/.platformio"
+
+install:
+    - pip install -U platformio
+    wget https://github.com/Hieromon/PageBuilder/archive/master.zip -O /tmp/PageBuilder_source.zip
+    unzip /tmp/PageBuilder_source.zip -d /tmp
+    wget https://github.com/Hieromon/PseudoPWM/archive/master.zip -O /tmp/PseudoPWM_source.zip
+    unzip /tmp/PseudoPWM_source.zip -d /tmp
+
+script:
+    - platformio ci --lib="." --lib="/tmp/PageBuilder-master" --lib="/tmp/PseudoPWM-master" --board=nodemcuv2

@@ -2,6 +2,7 @@ language: python
 python:
     - "2.7"
 
+# Cache PlatformIO packages using Travis CI container-based infrastructure
 sudo: false
 cache:
     directories:
@@ -9,10 +10,12 @@ cache:
 
 install:
     - pip install -U platformio
-    wget https://github.com/Hieromon/PageBuilder/archive/master.zip -O /tmp/PageBuilder_source.zip
-    unzip /tmp/PageBuilder_source.zip -d /tmp
-    wget https://github.com/Hieromon/PseudoPWM/archive/master.zip -O /tmp/PseudoPWM_source.zip
-    unzip /tmp/PseudoPWM_source.zip -d /tmp
+
+    - wget https://github.com/Hieromon/PageBuilder/archive/master.zip -O /tmp/PageBuilder_source.zip
+    - unzip /tmp/PageBuilder_source.zip -d /tmp
+
+    - wget https://github.com/Hieromon/PseudoPWM/archive/master.zip -O /tmp/PseudoPWM_source.zip
+    - unzip /tmp/PseudoPWM_source.zip -d /tmp
 
 script:
     - platformio ci --lib="." --lib="/tmp/PageBuilder-master" --lib="/tmp/PseudoPWM-master" --board=nodemcuv2

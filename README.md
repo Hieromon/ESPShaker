@@ -1,10 +1,10 @@
 ## ESPShaker
-*ESP8266 interactive serial command processor via Arduino core.*  
+*ESP8266 interactive serial command processor via Arduino core.* [![Build Status](https://travis-ci.org/Hieromon/ESPShaker.svg?branch=master)](https://travis-ci.org/Hieromon/ESPShaker)   
 
 It is implemented several APIs provided by ESP8266 arduino core so that they can be executed with interactive commands. You can control esp8266 interactively with the command via serial interface. With ESPShaker you can investigate the behavior of ESP8266, without having to write program code every time.  
 Since ESPShaker does not use the [AT SDK](http://espressif.com/en/support/download/at) provided by Espressif Systems, it can examine the pure behavior by [ESP8266 arduino core](https://github.com/esp8266/Arduino).  
 
-![screen_shot](https://user-images.githubusercontent.com/12591771/33419130-66fea260-d5ec-11e7-9955-e05ddaf4c9fd.png)
+![screen_shot](https://user-images.githubusercontent.com/12591771/33471881-b76d6332-d6b2-11e7-9603-6ff4cc6ac6ed.png)
 
 ### Features
 

@@ -5,3 +5,5 @@ img/
 *.sln
 *.vcxproj
 *.vcxproj.filters
+.pioenvs
+.piolibdeps

@@ -10,6 +10,7 @@
  */
 
 #include <functional>
+#include <stdio.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <DNSServer.h>
@@ -21,6 +22,8 @@
 extern "C" {
     #include <user_interface.h>
 }
+
+#define _VERSION    "1.0"
 
 class httpHandler : public RequestHandler {
 public:
@@ -459,10 +462,10 @@ void stopServer() {
     if (type == "web") {
         if (WebServer != nullptr) {
             Serial.println("Stop web server");
-			delete WebServer;
+            delete WebServer;
             WebServer = nullptr;
-			webHandler = nullptr;
-			Serial.println("OK");
+            webHandler = nullptr;
+            Serial.println("OK");
         }
     }
     else if (type == "dns") {
@@ -640,7 +643,7 @@ static const commandS	commands[] = {
     { "scan", "", scan },
     { "show", "", showConfig },
     { "softap", "{ssid [pass phrase]}|'discon'", softAP },
-    { "start", "web|{dns domain}|{mdns hostname service protocol port}", startServer },
+    { "start", "web|{dns domain}|{mdns hostname service protocol [port]}", startServer },
     { "station", "", station },
     { "status", "", showStatus },
     { "stop", "dns|web", stopServer },
@@ -669,6 +672,8 @@ void setup() {
     Cmd.addCommand("help", help);
     Cmd.addCommand("?", help);
     Cmd.setDefaultHandler(unrecognized);
+    Serial.printf("ESPShaker %s - %08x,Flash:%u,SDK%s\n", _VERSION, ESP.getChipId(), ESP.getFlashChipRealSize(), system_get_sdk_version());
+    Serial.println("Type \"help\", \"?\" for commands list.");
     showWiFiMode();
 }
 

@@ -4,8 +4,8 @@
  *	they can be executed with interactive commands.
  *	@file	ESPShaker.ino
  *	@author	hieromon@gmail.com
- *	@version	1.0
- *	@date	2017-11-23
+ *	@version	1.01
+ *	@date	2017-12-06
  *	@copyright	MIT license.
  */
 
@@ -23,7 +23,7 @@ extern "C" {
     #include <user_interface.h>
 }
 
-#define _VERSION    "1.0"
+#define _VERSION    "1.01"
 
 class httpHandler : public RequestHandler {
 public:
@@ -83,6 +83,8 @@ String	MDNSHostName = "";
 String	MDNSServiceName = "";
 String	MDNSProtocolName = "";
 bool	onDnsserver = false;
+bool    notifyEvent = false;
+bool    inSmartConfig = false;
 
 DNSServer			DnsServer;
 ESP8266WebServer	*WebServer = nullptr;
@@ -122,9 +124,27 @@ void beginWiFi() {
     PilotLED.Start(200, 100);
 }
 
+void beginWPS() {
+    Serial.println("WiFi.beginWPSConfig()");
+    Serial.println(WiFi.beginWPSConfig() ? "OK" : "Fail");
+    Serial.print("> ");
+}
+
 void disconnWiFi() {
     Serial.println("WiFi.disconnect");
     Serial.println(WiFi.disconnect() ? "OK" : "Fail");
+    Serial.print("> ");
+}
+
+void doEvent() {
+    String	onoff = String(Cmd.next());
+    if (onoff.length() > 0) {
+        onoff.toLowerCase();
+        if (onoff == "on" || onoff == "off") {
+            notifyEvent = onoff == "on" ? true : false;
+            Serial.println("WiFi.onEvent(" + onoff + ")");
+        }
+    }
     Serial.print("> ");
 }
 
@@ -159,6 +179,42 @@ void scan() {
         }
         String	ssid = WiFi.SSID(i).length() > 0 ? WiFi.SSID(i) : "?";
         Serial.println("BSSID<" + WiFi.BSSIDstr(i) + "> SSID:" + ssid + " RSSI(" + String(WiFi.RSSI(i)) + ") CH(" + String(WiFi.channel(i)) + ") " + encType);
+    }
+    Serial.print("> ");
+}
+
+void setSleep() {
+    WiFiSleepType   mode;
+    String  direction = Cmd.next();
+    direction.toLowerCase();
+    if (direction == "deep") {
+        char*   c_us = Cmd.next();
+        if (c_us) {
+            String  us = String(c_us);
+            Serial.println("ESP.deepSleep(" + us + ")");
+            ESP.deepSleep(us.toInt());
+        }
+    }
+    else {
+        bool valid = true;
+        Serial.print("WiFi.setSleepMode(");
+        if (direction == "none") {
+            Serial.print("WIFI_NONE_SLEEP");
+            mode = WIFI_NONE_SLEEP;
+        }
+        else if (direction == "light") {
+            Serial.print("WIFI_LIGHT_SLEEP");
+            mode = WIFI_LIGHT_SLEEP;
+        }
+        else if (direction == "modem") {
+            Serial.print("WIFI_MODEM_SLEEP");
+            mode = WIFI_MODEM_SLEEP;
+        }
+        else
+            valid = false;
+        Serial.println(')');
+        if (valid)
+            Serial.println(WiFi.setSleepMode(mode) ? "OK" : "Fail");
     }
     Serial.print("> ");
 }
@@ -218,6 +274,18 @@ void showConfig() {
     Serial.println(WiFi.subnetMask());
     Serial.println("WiFi.SSID:" + WiFi.SSID());
     Serial.println("WiFi.PSK:" + WiFi.psk());
+    Serial.print("WiFi.sleepMode:");
+    switch (WiFi.getSleepMode()) {
+    case WIFI_NONE_SLEEP:
+        Serial.println("NONE");
+        break;
+    case WIFI_LIGHT_SLEEP:
+        Serial.println("LIGHT");
+        break;
+    case WIFI_MODEM_SLEEP:
+        Serial.println("MODEM");
+        break;
+    }
     Serial.println("SDK version:" + String(ESP.getSdkVersion()));
     Serial.println("CPU Freq.:" + String(ESP.getCpuFreqMHz()) + "MHz");
     Serial.println("Flash size:" + String(ESP.getFlashChipRealSize()));
@@ -288,6 +356,41 @@ void showWiFiMode() {
     Serial.println(")");
 }
 
+void smartConfig() {
+    if (wifi_get_opmode() != WIFI_STA) {
+        Serial.println("[warning] WIFI_STA not available.");
+    }
+    String	direction(Cmd.next());
+    direction.toLowerCase();
+    if (direction == "start") {
+        Serial.println("WiFi.beginSmartConfig()");
+        if (WiFi.beginSmartConfig()) {
+            Serial.println("SmartConfig started, confirm on your smart-device.");
+            PilotLED.Start(200, 100);
+            inSmartConfig = true;
+        }
+        else { Serial.println("Fail"); }
+    }
+    else if (direction == "stop") {
+        Serial.println("WiFi.stopSmartConfig()");
+        if (WiFi.stopSmartConfig()) {
+            Serial.println("SmartConfig stopped.");
+            inSmartConfig = false;
+        }
+        else { Serial.println("Fail"); }
+    }
+    else if (direction == "done") {
+        Serial.println("WiFi.smartConfigDone()");
+        if (WiFi.smartConfigDone()) {
+            Serial.println("true");
+            inSmartConfig = false;
+        }
+        else { Serial.println("false"); }
+    }
+    else { Serial.println(); }
+    Serial.print("> ");
+}
+
 void softAP() {
     char*	c_ssid = Cmd.next();
     String	ssid(c_ssid);
@@ -322,19 +425,6 @@ void softAP() {
                 Serial.println();
                 Serial.println("Station:<" + toMacAddress(e.mac) + "> disconnected");
                 Serial.print("> "); });
-#else
-            // Use SDK for core 2.3.0
-            wifi_set_event_handler_cb([](System_Event_t *e) {
-                if (e->event == EVENT_SOFTAPMODE_STACONNECTED) {
-                    Serial.println();
-                    Serial.println("Station:<" + toMacAddress(e->event_info.sta_connected.mac) + "> connected");
-                    Serial.print("> ");
-                }
-                else if (e->event == EVENT_SOFTAPMODE_STADISCONNECTED) {
-                    Serial.println();
-                    Serial.println("Station:<" + toMacAddress(e->event_info.sta_connected.mac) + "> disconnected");
-                    Serial.print("> ");
-                } });
 #endif
             Serial.print("  softAPIP:");
             Serial.println(WiFi.softAPIP());
@@ -494,7 +584,7 @@ String toMacAddress(const uint8_t mac[]) {
     return macAddr;
 }
 
-static const char* httpHeaders[] = {
+static const char* httpHeaders[] PROGMEM = {
     "Access-Control-Allow-Credentials",
     "Access-Control-Allow-Headers",
     "Access-Control-Allow-Methods",
@@ -628,6 +718,36 @@ void http() {
     Serial.print("> ");
 }
 
+typedef struct _eventType {
+    const WiFiEvent_t event;
+    const char* desc;
+} eventTypeS;
+static const eventTypeS wifiEvents[] PROGMEM = {
+    { WIFI_EVENT_STAMODE_CONNECTED, "WIFI_EVENT_STAMODE_CONNECTED" },
+    { WIFI_EVENT_STAMODE_DISCONNECTED, "WIFI_EVENT_STAMODE_CONNECTED" },
+    { WIFI_EVENT_STAMODE_AUTHMODE_CHANGE, "WIFI_EVENT_STAMODE_AUTHMODE_CHANGE" },
+    { WIFI_EVENT_STAMODE_GOT_IP, "WIFI_EVENT_STAMODE_GOT_IP" },
+    { WIFI_EVENT_STAMODE_DHCP_TIMEOUT, "WIFI_EVENT_STAMODE_DHCP_TIMEOUT" },
+    { WIFI_EVENT_SOFTAPMODE_STACONNECTED, "WIFI_EVENT_SOFTAPMODE_STACONNECTED" },
+    { WIFI_EVENT_SOFTAPMODE_STADISCONNECTED, "WIFI_EVENT_SOFTAPMODE_STADISCONNECTED" },
+    { WIFI_EVENT_SOFTAPMODE_PROBEREQRECVED, "WIFI_EVENT_SOFTAPMODE_PROBEREQRECVED" },
+    { WIFI_EVENT_MAX, "WIFI_EVENT_MAX" },
+    { WIFI_EVENT_ANY, "WIFI_EVENT_ANY" },
+    { WIFI_EVENT_MODE_CHANGE, "WIFI_EVENT_MODE_CHANGE" }
+};
+
+void wifiEvent(WiFiEvent_t event) {
+    if (notifyEvent) {
+        Serial.print("[Event]:" + String((int)event));
+        for (uint8_t i = 0; i <= sizeof(wifiEvents) / sizeof(eventTypeS); i++) {
+            Serial.print("(" + String(wifiEvents[i].desc));
+            break;
+        }
+        Serial.println(")");
+        Serial.print("> ");
+    }
+}
+
 typedef struct _command {
     const char*	name;
     const char*	option;
@@ -638,15 +758,19 @@ static const commandS	commands[] = {
     { "autoconnect", "on|off", autoConnect },
     { "begin", "[ssid] [pass phrase]", beginWiFi },
     { "discon", "", disconnWiFi },
+    { "event", "on|off", doEvent },
     { "http", "{get url}|{on uri page_content}", http },
     { "mode", "ap|sta|apsta|off", setWiFiMode },
     { "scan", "", scan },
+    { "sleep", "none|light|modem|{deep SLEEP_TIME}", setSleep },
+    { "smartconfig", "start|stop|done", smartConfig },
     { "show", "", showConfig },
     { "softap", "{ssid [pass phrase]}|'discon'", softAP },
     { "start", "web|{dns domain}|{mdns hostname service protocol [port]}", startServer },
     { "station", "", station },
     { "status", "", showStatus },
     { "stop", "dns|web", stopServer },
+    { "wps", "", beginWPS },
     { "reset", "", reset }
 };
 
@@ -675,6 +799,7 @@ void setup() {
     Serial.printf("ESPShaker %s - %08x,Flash:%u,SDK%s\n", _VERSION, ESP.getChipId(), ESP.getFlashChipRealSize(), system_get_sdk_version());
     Serial.println("Type \"help\", \"?\" for commands list.");
     showWiFiMode();
+    WiFi.onEvent(wifiEvent);
 }
 
 void loop() {
@@ -683,6 +808,13 @@ void loop() {
         PilotLED.Start(800, 600);
         WiFiStatus = cs;
         showStatus();
+        if (WiFiStatus == WL_CONNECTED)
+            if (inSmartConfig) {
+                Serial.println("Smart Config completed, SSID:" + WiFi.SSID());
+                Serial.print("WiFi.LocalIP:");
+                Serial.println(WiFi.localIP());
+                inSmartConfig = false;
+            }
     }
     WiFiMode_t	cm = WiFi.getMode();
     if (cm != WiFiMode) {

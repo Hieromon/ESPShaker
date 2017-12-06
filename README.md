@@ -16,7 +16,7 @@ Since ESPShaker does not use the [AT SDK](http://espressif.com/en/support/downlo
 
 ### Works on
 
-It has tested on NodeMCU v1.0 module (ESP-12E). Other ESP8266 modules will also work.  
+It has tested on NodeMCU v1.0 module (ESP-12E). Other ESP8266 modules will also work, but its sketch size exceeds 345KB. It may not work on prior modules such as ESP-01.  
 Required [Arduino IDE](http://www.arduino.cc/en/main/software) is current upstream at **the 1.8 level or later**, and also [ESP8266 Arduino core 2.3.0](https://github.com/esp8266/Arduino).
 
 ### Installation
@@ -82,15 +82,19 @@ Enter `command` and `operand` separated by blanks. Depending on the command, it 
 | autoconnect | Set auto connect validity | WiFi.setAutoConnect |
 | begin | Begin WiFi communication | WiFi.begin |
 | discon | Disconnect WiFi | WiFi.disconnect |
+| event | Notify WiFi event occurrence | WiFi.onEvent |
 | http | Issues HTTP GET method or Register web page | HTTPClient.begin and get, ESP8266WebServer.addHandler |
 | mode | Set Wi-Fi working mode | WiFi.mode |
 | scan | Scan all available APs | WiFi.scanNetworks |
 | show | Display the current IPs the module has | WiFi.localIP and Others |
+| sleep | Set sleep type or enter a deep sleep | WiFi.setSleepMode or ESP.deepSleep |
+| smartconfig | Configure new SSID with [ESP-TOUCH](http://espressif.com/en/products/software/esp-touch/resources) | WiFi.beginSmartConfig |
 | softap | Start SoftAP operation or stops it | WiFi.softAP |
 | start | Start Web server or DNS server | ESP8266WebServer.begin or DNSServer.start |
 | station | Display number of stations current connected SoftAP | WiFi.softAPgetStationNum |
 | status | Display current connection status of station | WiFi.status |
 | stop | Stop server | ESP8266WebServer.close or DNSServer.stop |
+| wps | Begin WPS configuration | WiFi.beginWPSConfiguration |
 | reset | Reset esp8266 module | ESP.reset |
 
 The `WiFi` object is an exported instance of `ESP8266WiFiClass` described in `ESP8266WiFi.h`. The `HTTPClient` is defined using `ESP8266HTTPClient.h`. `ESP8266WebServer` is defined class in `ESP8266WebServer.h` and `DNSServer` class is declared in `DNSServer.h`.  
@@ -124,13 +128,21 @@ Enter `help` or `?` will display commands list.
    `PASS` : Passphrase.  
    If `SSID` or `PASS` omitted, the previous value in the flash will be used.
 
-4. discon  
+4. event  
+   Detects events with `WiFi.onEvent` method and displays.
+   ```
+   event on | off
+   ```
+   `on` : Displays that an event has occurred.  
+   `off` : No happens at events, but the callback on **onEvent** remains yet.
+
+5. discon  
    Disconnects Wi-Fi Station from AP.
    ```
    discon
    ```
 
-5. http  
+6. http  
    Issues the GET method to specified Web site or define web page as plain texts.
    ```
    http get URL
@@ -142,10 +154,10 @@ Enter `help` or `?` will display commands list.
    `URI` : Specify uri of the simple web page to be created.  
    `PAGE_CONTENT` : A page content text. However, it can include simple HTML tags as `<p>`, `<b>`.  
    + e.g.  
-   `http get http://www.google.com/` will display the response from the http\://www.google.com server. At this time, ESP8266 module must be connected to the other AP connected by WiFi.begin to the Internet in STA mode or AP_STA mode.  
-   `http on /hello Hello, world!` creates 'Hello, world!' page in the internal Web server of ESPShaker. When a client like smartphone accesses to uri of ESPShaker internal Web server which running in AP mode (e.g. http\://192.168.4.1/hello), it should see the page the created by `http on` command.
+     + `http get http://www.google.com/` will display the response from the google server. At this time, ESP8266 module must be connected to Internet via the other AP with STA mode or AP_STA mode.  
+     + `http on /hello Hello, world!` creates 'Hello, world!' page in the internal Web server of ESPShaker. When a client like smartphone accesses to uri of ESPShaker which running in AP mode (e.g. `http://192.168.4.1/hello`), it should see the `Hello, world!` created by `http on` command.
 
-6. mode  
+7. mode  
    Set Wi-Fi working mode to Station mode (WIFI_STA), SoftAP (WIFI_AP) or Station + SoftAP (WIFI_APSTA), and save it in flash. Immediately after resetting, the default mode is SoftAP mode.
    ```
    mode ap | sta | apsta | off
@@ -155,13 +167,13 @@ Enter `help` or `?` will display commands list.
    `apsta` : Set WIFI_APSTA mode.  
    `off` : Shutdown Wi-Fi working.  
 
-7. scan  
+8. scan  
    Scan all available APs.
    ```
    scan
    ```
 
-8. show  
+9. show  
    Display current module saved values as follows.  
    ```
    show
@@ -179,7 +191,31 @@ Enter `help` or `?` will display commands list.
    + Saved PSK.  
    + Chip configuration.
 
-9. softap  
+10. sleep  
+    Set sleep mode or embarks a deep sleep.
+    ```
+    sleep none | light | modem
+    sleep deep SLEEP_TIME
+    ```
+    - `sleep` command sets wifi sleep type for power saving.
+      - `none` :  Disable power saving.
+      - `light` : Enable Light-sleep mode.
+      - `modem` : Enable Modem-sleep mode. 
+    - `sleep deep` command invokes `ESP.deepSleep` API. It automatically wakes up when `SLEEP_TIME` out. Upon waking up, ESP8266 boots up from setup(), but *GPIO16* and *RST* must be connected. For reference, *GPIO16* is assigned to *D0* on **ESP-12** (NodeMCU) and is **not connected** to external pin with **ESP-01**.
+      - `SLEEP_TIME` : Time from deep sleep to waking up (in microseconds unit).  
+
+11. smartconfig  
+   Start or stop Smart Config by ESP-TOUCH.<img  align="right" alt="esp-touch" src="https://user-images.githubusercontent.com/12591771/33641022-18f32c64-da77-11e7-8492-5460b78d4466.png">
+   ```
+   smartconfig start | stop | done
+   ```
+   The *Smart Config* is based on the [ESP-TOUCH](http://espressif.com/en/products/software/esp-touch/resources) protocol developed by Espressif Systems. It is seamlessly configure Wi-Fi devices to connect to the router.  
+   ESP-TOUCH Apps for smartphone are released iOS and Android both. *ESP8266 SmartConfig* for iOS is [here](https://itunes.apple.com/jp/app/espressif-esptouch/id1071176700) and for Android is [here](https://play.google.com/store/apps/details?id=com.cmmakerclub.iot.esptouch). So it can be established ESP8266 to the new AP which is connected with smartphone already.  
+   - `start` : Start Smart Config. Transits to this mode, then turns on the SmartConfig Apps on a smartphone manually.
+   - `stop` : Stop Smart Config.
+   - `done` : Inquery a status of Smart Config.
+
+12. softap  
    Start SoftAP operation.
    ```
    softap SSID PASS
@@ -187,7 +223,7 @@ Enter `help` or `?` will display commands list.
    `SSID` : Specify SSID for SoftAP.  
    `PASS` : Specify pass-phrase for the SSID.
 
-10. start  
+13. start  
     Start Web server, DNS server, mDNS service.
     ```
     start web
@@ -203,20 +239,20 @@ Enter `help` or `?` will display commands list.
        - `PROTOCOL` : Specifies the protocol like `tcp`.  
        - `PORT` : Specifies the port of the service. When service is http, The port operand could be omitted and assumed #80.  
 
-11. station  
+14. station  
     Display number of connected stations for SoftAP.
     ```
     station
     ```
 
-12. status  
+15. status  
     Display current Wi-Fi status.
     ```
     status
     ```
     Display Wi-Fi connection status via WiFi.status() function. The return value described wl_status_t enum.
 
-13. stop  
+16. stop  
     Stop ESPShaker's internal server.
     ```
     stop web | dns
@@ -224,13 +260,31 @@ Enter `help` or `?` will display commands list.
     `web` : Stop web server.  
     `dns` : Stop DNS server.
 
-14. reset  
+17. wps  
+    Begin WPS configuration.
+    ```
+    wps
+    ```
+
+18. reset  
     Reset the module.
     ```
     reset
     ```
     This command invokes `ESP.reset()` function.
 
+
+### Change log
+
+#### [1.01] 2017-12-06
+- Supports **event** command.
+- Supports **sleep** command.
+- Supports **smartconfig** command.
+- Supports **wps** command.
+- Add sleep mode status in show command.
+
+#### [1.0] 2017-11-23
+- First Release.
 
 ### License
 

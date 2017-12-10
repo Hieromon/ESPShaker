@@ -4,8 +4,8 @@
  *	they can be executed with interactive commands.
  *	@file	ESPShaker.ino
  *	@author	hieromon@gmail.com
- *	@version	1.01
- *	@date	2017-12-06
+ *	@version	1.02
+ *	@date	2017-12-07
  *	@copyright	MIT license.
  */
 
@@ -16,6 +16,7 @@
 #include <DNSServer.h>
 #include <ESP8266mDNS.h>
 #include <ESP8266HTTPClient.h>
+#include <FS.h>
 #include "PseudoPWM.h"
 #include "SerialCommand.h"
 #include "PageBuilder.h"
@@ -23,7 +24,7 @@ extern "C" {
     #include <user_interface.h>
 }
 
-#define _VERSION    "1.01"
+#define _VERSION    "1.02"
 
 class httpHandler : public RequestHandler {
 public:
@@ -91,6 +92,17 @@ ESP8266WebServer	*WebServer = nullptr;
 HTTPClient			client;
 httpHandler*		webHandler = nullptr;
 
+bool isNumber(String str) {
+    uint8_t varLength = (uint8_t)str.length();
+    if (varLength > 0) {
+        for (uint8_t i = 0; i < varLength; i++)
+            if (!isDigit(str.charAt(i)))
+                return false;
+        return true;
+    }
+    return false;
+}
+
 void autoConnect() {
     String	onoff = String(Cmd.next());
     if (onoff.length() > 0) {
@@ -125,7 +137,7 @@ void beginWiFi() {
 }
 
 void beginWPS() {
-    Serial.println("WiFi.beginWPSConfig()");
+    Serial.println("WiFi.beginWPSConfig");
     Serial.println(WiFi.beginWPSConfig() ? "OK" : "Fail");
     Serial.print("> ");
 }
@@ -143,6 +155,145 @@ void doEvent() {
         if (onoff == "on" || onoff == "off") {
             notifyEvent = onoff == "on" ? true : false;
             Serial.println("WiFi.onEvent(" + onoff + ")");
+        }
+    }
+    Serial.print("> ");
+}
+
+void fileSystem() {
+    String  op = String(Cmd.next());
+    op.toLowerCase();
+    if (op == "start" || op == "stop" || op == "dir" || op == "file" || op == "format" || op == "info" || op == "remove" || op == "rename") {
+        PilotLED.Start(200, 100);
+        FSInfo  fsInfo;
+        Serial.println(String("fs ") + op);
+        if (op == "start") {
+            Serial.print("SPIFFS ");
+            if (SPIFFS.begin()) {
+                SPIFFS.info(fsInfo);
+                Serial.println("mounted. " + String(fsInfo.totalBytes) + " bytes/" + String(fsInfo.usedBytes) + " used.");
+            }
+            else { Serial.println("could not start."); }
+        }
+        else if (op == "stop") {
+            Serial.println("SPIFFS " + op);
+            SPIFFS.end();
+            Serial.println("OK");
+        }
+        else if (op == "format") {
+            Serial.println("SPIFFS " + op);
+            Serial.println(SPIFFS.format() ? "OK" : "Fail");
+        }
+        else {
+            if (SPIFFS.info(fsInfo)) {
+                if (op == "dir") {
+                    Serial.println("Dir:");
+                    uint16_t    fn = 0;
+                    Dir dir = SPIFFS.openDir("/");
+                    while (dir.next()) {
+                        fn++;
+                        Serial.print(String(fn) + ":" + dir.fileName() + " ");
+                        File f = dir.openFile("r");
+                        Serial.println(f.size());
+                        f.close();
+                    }
+                }
+                else if (op == "info") {
+                    Serial.println("FS:");
+                    Serial.println("Size:" + String(fsInfo.totalBytes));
+                    Serial.println("Used:" + String(fsInfo.usedBytes));
+                    Serial.println("Block size:" + String(fsInfo.blockSize));
+                    Serial.println("Page size:" + String(fsInfo.pageSize));
+                    Serial.println("Max open files:" + String(fsInfo.maxOpenFiles));
+                    Serial.println("Max path length:" + String(fsInfo.maxPathLength));
+                }
+                else if (op == "file" || op == "remove" || op == "rename") {
+                    const char* c_path = Cmd.next();
+                    if (c_path) {
+                        String path = String(c_path);
+                        if (path.charAt(0) != '/')
+                            path = String("/") + path;
+                        Serial.print(path + ":");
+                        if (SPIFFS.exists(path)) {
+                            if (op == "file") {
+                                char buff[128] = { 0 };
+                                File f = SPIFFS.open(path, "r");
+                                int fileSize = f.size();
+                                Serial.println(String(fileSize) + "bytes");
+                                while (fileSize > 0 || fileSize == -1) {
+                                    size_t	availSize = f.available();
+                                    if (availSize) {
+                                        int	blkSize = f.readBytes(buff, ((availSize > sizeof(buff)) ? sizeof(buff) : availSize));
+                                        Serial.write(buff, blkSize);
+                                        if (fileSize > 0)
+                                            fileSize -= blkSize;
+                                    }
+                                    delay(1);
+                                }
+                            }
+                            else if (op == "remove") {
+                                Serial.println();
+                                Serial.print(SPIFFS.remove(path) ? "OK" : "Fail");
+                            }
+                            else if (op == "rename") {
+                                const char* c_newPath = Cmd.next();
+                                if (c_newPath) {
+                                    String newPath = String(c_newPath);
+                                    if (!SPIFFS.exists(newPath)) {
+                                        Serial.println("-> " + newPath);
+                                        Serial.print(SPIFFS.rename(path, newPath) ? "OK" : "Fail");
+                                    }
+                                    else { Serial.print("[error] file already exists."); }
+                                }
+                                else { Serial.print("[error] new file name missing."); }
+                            }
+                        }
+                        else { Serial.print(" not found."); }
+                        Serial.println();
+                    }
+                }
+            }
+            else { Serial.println("[error] FS not mounted."); }
+        }
+        PilotLED.Start(800, 600);
+    }
+    Serial.print(" >");
+}
+
+void freeHeap() {
+    Serial.println("Free heap size:" + String(system_get_free_heap_size()));
+    Serial.print("> ");
+}
+
+void gpio() {
+    String  op = String(Cmd.next());
+    op.toLowerCase();
+    if (op == "get" || op == "set") {
+        String  s_portNum = String(Cmd.next());
+        if (isNumber(s_portNum)) {
+            uint8_t portNum = (uint8_t)s_portNum.toInt();
+            if (portNum >= 0 && portNum <= 16) {
+                if (portNum >= 6 && portNum <= 11) {
+                    Serial.println("[error] GPIO" + String(portNum) + " cannot be specified.");
+                }
+                else {
+                    if (op == "get") {
+                        Serial.print("Get GPIO" + String(portNum) + ":");
+                        Serial.println(digitalRead(portNum) == LOW ? String("LOW") : String("HIGH"));
+                    }
+                    else {
+                        String  s_output = String(Cmd.next());
+                        s_output.toLowerCase();
+                        if (s_output == "high" || s_output == "low") {
+                            uint8_t output = s_output == "low" ? LOW : HIGH;
+                            Serial.print("Set GPIO" + String(portNum) + ":");
+                            pinMode(portNum, OUTPUT);
+                            digitalWrite(portNum, output);
+                            Serial.println(digitalRead(portNum) == LOW ? String("LOW") : String("HIGH"));
+                        }
+                    }
+                }
+            }
         }
     }
     Serial.print("> ");
@@ -185,7 +336,7 @@ void scan() {
 
 void setSleep() {
     WiFiSleepType   mode;
-    String  direction = Cmd.next();
+    String  direction = String(Cmd.next());
     direction.toLowerCase();
     if (direction == "deep") {
         char*   c_us = Cmd.next();
@@ -225,19 +376,19 @@ void setWiFiMode() {
     mode.toLowerCase();
     bool	t;
     Serial.print("WiFi.mode(");
-    if (mode == String("ap")) {
+    if (mode == "ap") {
         Serial.print("WIFI_AP");
         t = WiFi.mode(WIFI_AP);
     } 
-    else if (mode == String("sta")) {
+    else if (mode == "sta") {
         Serial.print("WIFI_STA");
         t = WiFi.mode(WIFI_STA);
     }
-    else if (mode == String("apsta")) {
+    else if (mode == "apsta") {
         Serial.print("WIFI_AP_STA");
         t = WiFi.mode(WIFI_AP_STA);
     }
-    else if (mode == String("off")) {
+    else if (mode == "off") {
         Serial.print("WIFI_OFF");
         WiFi.disconnect();
         t = WiFi.mode(WIFI_OFF);
@@ -363,7 +514,7 @@ void smartConfig() {
     String	direction(Cmd.next());
     direction.toLowerCase();
     if (direction == "start") {
-        Serial.println("WiFi.beginSmartConfig()");
+        Serial.println("WiFi.beginSmartConfig");
         if (WiFi.beginSmartConfig()) {
             Serial.println("SmartConfig started, confirm on your smart-device.");
             PilotLED.Start(200, 100);
@@ -372,7 +523,7 @@ void smartConfig() {
         else { Serial.println("Fail"); }
     }
     else if (direction == "stop") {
-        Serial.println("WiFi.stopSmartConfig()");
+        Serial.println("WiFi.stopSmartConfig");
         if (WiFi.stopSmartConfig()) {
             Serial.println("SmartConfig stopped.");
             inSmartConfig = false;
@@ -380,7 +531,7 @@ void smartConfig() {
         else { Serial.println("Fail"); }
     }
     else if (direction == "done") {
-        Serial.println("WiFi.smartConfigDone()");
+        Serial.println("WiFi.smartConfigDone");
         if (WiFi.smartConfigDone()) {
             Serial.println("true");
             inSmartConfig = false;
@@ -426,7 +577,7 @@ void softAP() {
                 Serial.println("Station:<" + toMacAddress(e.mac) + "> disconnected");
                 Serial.print("> "); });
 #endif
-            Serial.print("  softAPIP:");
+            Serial.print("[info] softAPIP:");
             Serial.println(WiFi.softAPIP());
             Serial.println("OK");
         }
@@ -436,20 +587,24 @@ void softAP() {
 }
 
 void softAPConfig() {
-    IPAddress	apIP(0,0,0,0);
-    IPAddress	gwIP(0,0,0,0);
-    IPAddress	smIP(0,0,0,0);
+    IPAddress	apIP(192,168,4,1);
+    IPAddress	gwIP(192,168,4,1);
+    IPAddress	nmIP(255,255,255,0);
     String	s_apIP = String(Cmd.next());
     String	s_gwIP = String(Cmd.next());
-    String	s_smIP = String(Cmd.next());
-    apIP.fromString(s_apIP);
-    gwIP.fromString(s_gwIP);
-    smIP.fromString(s_smIP);
+    String	s_nmIP = String(Cmd.next());
+    if (s_apIP.length() > 0)
+        apIP.fromString(s_apIP);
+    if (s_gwIP.length() > 0)
+        gwIP.fromString(s_gwIP);
+    if (s_nmIP.length() > 0)
+        nmIP.fromString(s_nmIP);
+    Serial.println("nm");
     Serial.print("WiFi.softAIPConfig(");
     Serial.print(s_apIP + ",");
     Serial.print(s_gwIP + ",");
-    Serial.println(s_smIP + ")");
-    Serial.println(WiFi.softAPConfig(apIP, gwIP, smIP) ? "OK" : "Fail");
+    Serial.println(s_nmIP + ")");
+    Serial.println(WiFi.softAPConfig(apIP, gwIP, nmIP) ? "OK" : "Fail");
     Serial.print("> ");
 }
 
@@ -722,9 +877,9 @@ typedef struct _eventType {
     const WiFiEvent_t event;
     const char* desc;
 } eventTypeS;
-static const eventTypeS wifiEvents[] PROGMEM = {
+static const eventTypeS wifiEvents[] = {
     { WIFI_EVENT_STAMODE_CONNECTED, "WIFI_EVENT_STAMODE_CONNECTED" },
-    { WIFI_EVENT_STAMODE_DISCONNECTED, "WIFI_EVENT_STAMODE_CONNECTED" },
+    { WIFI_EVENT_STAMODE_DISCONNECTED, "WIFI_EVENT_STAMODE_DISCONNECTED" },
     { WIFI_EVENT_STAMODE_AUTHMODE_CHANGE, "WIFI_EVENT_STAMODE_AUTHMODE_CHANGE" },
     { WIFI_EVENT_STAMODE_GOT_IP, "WIFI_EVENT_STAMODE_GOT_IP" },
     { WIFI_EVENT_STAMODE_DHCP_TIMEOUT, "WIFI_EVENT_STAMODE_DHCP_TIMEOUT" },
@@ -738,12 +893,13 @@ static const eventTypeS wifiEvents[] PROGMEM = {
 
 void wifiEvent(WiFiEvent_t event) {
     if (notifyEvent) {
-        Serial.print("[Event]:" + String((int)event));
+        Serial.print("[event] " + String((int)event));
         for (uint8_t i = 0; i <= sizeof(wifiEvents) / sizeof(eventTypeS); i++) {
-            Serial.print("(" + String(wifiEvents[i].desc));
-            break;
+            if (wifiEvents[i].event == event) {
+                Serial.println(" (" + String(wifiEvents[i].desc) + ")");
+                break;
+            }
         }
-        Serial.println(")");
         Serial.print("> ");
     }
 }
@@ -754,24 +910,27 @@ typedef struct _command {
     void(*func)();
 } commandS;
 static const commandS	commands[] = {
-    { "apconfig", "ip gateway netmask", softAPConfig },
+    { "apconfig", "[AP_IP] [GW_IP] [NETMASK]", softAPConfig },
     { "autoconnect", "on|off", autoConnect },
-    { "begin", "[ssid] [pass phrase]", beginWiFi },
+    { "begin", "[SSID] [PASSPHRASE]", beginWiFi },
     { "discon", "", disconnWiFi },
     { "event", "on|off", doEvent },
-    { "http", "{get url}|{on uri page_content}", http },
+    { "fs", "start|dir|{file PATH}|format|info|{remove PATH}|{rename PATH NEW_PATH}", fileSystem },
+    { "gpio", "{get PORT_NUM}|{set PORT_NUM high|low}", gpio },
+    { "heap", "", freeHeap },
+    { "http", "{get url}|{on uri PAGE_CONTENT}", http },
     { "mode", "ap|sta|apsta|off", setWiFiMode },
+    { "reset", "", reset },
     { "scan", "", scan },
     { "sleep", "none|light|modem|{deep SLEEP_TIME}", setSleep },
     { "smartconfig", "start|stop|done", smartConfig },
     { "show", "", showConfig },
-    { "softap", "{ssid [pass phrase]}|'discon'", softAP },
-    { "start", "web|{dns domain}|{mdns hostname service protocol [port]}", startServer },
+    { "softap", "{SSID [PASSPHRASE]}|'discon'", softAP },
+    { "start", "web|{dns domain}|{mdns HOST_NAME SERVICE PROTOCOL [PORT]}", startServer },
     { "station", "", station },
     { "status", "", showStatus },
     { "stop", "dns|web", stopServer },
-    { "wps", "", beginWPS },
-    { "reset", "", reset }
+    { "wps", "", beginWPS }
 };
 
 void unrecognized(const char* cmd) {
@@ -796,7 +955,7 @@ void setup() {
     Cmd.addCommand("help", help);
     Cmd.addCommand("?", help);
     Cmd.setDefaultHandler(unrecognized);
-    Serial.printf("ESPShaker %s - %08x,Flash:%u,SDK%s\n", _VERSION, ESP.getChipId(), ESP.getFlashChipRealSize(), system_get_sdk_version());
+    Serial.printf("ESPShaker %s - %08x,Flash:%u,SDK%s\r\n", _VERSION, ESP.getChipId(), ESP.getFlashChipRealSize(), system_get_sdk_version());
     Serial.println("Type \"help\", \"?\" for commands list.");
     showWiFiMode();
     WiFi.onEvent(wifiEvent);

@@ -10,13 +10,15 @@ Since ESPShaker does not use the [AT SDK](http://espressif.com/en/support/downlo
 
 * Implemented a commonly used basic WiFi API to the command
 * Supports WIFI_AP, WIFI_STA, WIFI_AP_STA mode
-* Built in Web server and DNS server
-* Supports http get method
-* It can build simple web pages interactively for response
+* Supports *SmartConfig* with *ESP-TOUCH*
+* GPIO port I/O
+* SPIFFS file system handling
+* Built in Web server with http GET/PUT handling and DNS server, mDNS service
+* It can build simple web pages interactively for http response
 
 ### Works on
 
-It has tested on NodeMCU v1.0 module (ESP-12E). Other ESP8266 modules will also work, but its sketch size exceeds 345KB. It may not work on prior modules such as ESP-01.  
+It has tested on NodeMCU v1.0 module (ESP-12E). Other ESP8266 modules will also work, but its sketch size exceeds 370KB. It may not work on prior modules such as ESP-01.  
 Required [Arduino IDE](http://www.arduino.cc/en/main/software) is current upstream at **the 1.8 level or later**, and also [ESP8266 Arduino core 2.3.0](https://github.com/esp8266/Arduino).
 
 ### Installation
@@ -48,9 +50,9 @@ Usage is simple. Connect ESP8266 module to PC and start the serial monitor. Then
   ```
   mode sta
   begin anyssid password
-  -> WiFi.Status(WL_CONNECTED) or WiFi.Status(WL_NO_SSID_AVAIL) or WiFi.Status(WL_CONNECT_FAILED)
+  -> some conenction status response
   http get http://some.where.url/
-  -> response from server
+  -> some response from server
   ```
 - AP_STA
   ```
@@ -83,8 +85,11 @@ Enter `command` and `operand` separated by blanks. Depending on the command, it 
 | begin | Begin WiFi communication | WiFi.begin |
 | discon | Disconnect WiFi | WiFi.disconnect |
 | event | Notify WiFi event occurrence | WiFi.onEvent |
+| fs | SPIFFS file system handling | SPIFFS |
+| gpio | GPIO access | deigitalRead, digitalWrite |
 | http | Issues HTTP GET method or Register web page | HTTPClient.begin and get, ESP8266WebServer.addHandler |
 | mode | Set Wi-Fi working mode | WiFi.mode |
+| reset | Reset esp8266 module | ESP.reset |
 | scan | Scan all available APs | WiFi.scanNetworks |
 | show | Display the current IPs the module has | WiFi.localIP and Others |
 | sleep | Set sleep type or enter a deep sleep | WiFi.setSleepMode or ESP.deepSleep |
@@ -95,23 +100,22 @@ Enter `command` and `operand` separated by blanks. Depending on the command, it 
 | status | Display current connection status of station | WiFi.status |
 | stop | Stop server | ESP8266WebServer.close or DNSServer.stop |
 | wps | Begin WPS configuration | WiFi.beginWPSConfiguration |
-| reset | Reset esp8266 module | ESP.reset |
 
 The `WiFi` object is an exported instance of `ESP8266WiFiClass` described in `ESP8266WiFi.h`. The `HTTPClient` is defined using `ESP8266HTTPClient.h`. `ESP8266WebServer` is defined class in `ESP8266WebServer.h` and `DNSServer` class is declared in `DNSServer.h`.  
 Enter `help` or `?` will display commands list.
 
 #### Command specifications
 
-1. appconfig  
+1. **appconfig**  
    Configure IPs of AP mode operation.
    ```
-   apconfig AP_IP GW_IP NETMASK
+   apconfig [AP_IP] [GW_IP] [NETMASK]
    ```
-   `AP_IP` : AP's local IP address.  
-   `GW_IP` : Gateway IP adderss.  
-   `NETMASK` : Subnet mask.
+   `AP_IP` : AP's local IP address. If not specified, **192.168.4.1** is assumed as the default.  
+   `GW_IP` : Gateway IP adderss. If not specified, **192.168.4.1** is assumed as the default.  
+   `NETMASK` : Subnet mask. If not specified, **255.255.255.0** is assumed as the default.
 
-2. autoconnect  
+2. **autoconnect**  
    Set the ESP8266 Station to connect to the AP (whose ID is cached) automatically or not when powered on.
    ```
    autoconnect on | off
@@ -119,30 +123,70 @@ Enter `help` or `?` will display commands list.
    `on` : Auto-connect on.  
    `off` : Auto-connect off.
 
-3. begin  
-   Connect to the AP and starts working the WiFi station. Specified `ssid` and `pass` would be saved to the flash in ESP8266 module.  
+3. **begin**  
+   Connect to the AP and starts working the WiFi station. Specified `SSID` and `PASSPHRASE` would be saved to the flash in ESP8266 module.  
    ```
-   begin [SSID [PASS]]
+   begin [SSID [PASSPHRASE]]
    ```
    `SSID` : SSID that should be connected.  
-   `PASS` : Passphrase.  
-   If `SSID` or `PASS` omitted, the previous value in the flash will be used.
+   `PASSPHRASE` : Passphrase.  
+   If `SSID` or `PASSPHRASE` omitted, the previous value in the flash will be used.
 
-4. event  
-   Detects events with `WiFi.onEvent` method and displays.
-   ```
-   event on | off
-   ```
-   `on` : Displays that an event has occurred.  
-   `off` : No happens at events, but the callback on **onEvent** remains yet.
-
-5. discon  
+4. **discon**  
    Disconnects Wi-Fi Station from AP.
    ```
    discon
    ```
 
-6. http  
+5. **event**  
+   Detects events with **WiFi.onEvent** method and displays.
+   ```
+   event on | off
+   ```
+   `on` : Displays that an event has occurred.  
+   `off` : No happens at events, but the callback on **onEvent** remains yet.  
+   When an event occurs, its message would be displayed as the below.  
+
+   > \> softap esp8266ap 12345678  
+   > \> event on  
+   > [event]:7 (WIFI_EVENT_SOFTAPMODE_PROBEREQRECVED)  
+   > [event]:7 (WIFI_EVENT_SOFTAPMODE_PROBEREQRECVED)  
+   > ... WiFi client was connected.  
+   > [event]:5 (WIFI_EVENT_SOFTAPMODE_STACONNECTED)  
+
+6. **fs**  
+   Handles SPIFFS file system.
+   ```
+   fs start
+   fs dir | info
+   fs format
+   fs file PATH
+   fs remove PATH
+   fs rename PATH NEW_PATH
+   ```
+   + `fs start` : Mounts SPIFFS file system and starts FS API. Just launching ESPShaker does not mount SPIFFS. It is necessary to mount it with **fs start** command before starting FS operation.  
+   + `fs dir | info` command displays the information of directory or file system.  
+     + `dir` : Display directory list.  
+     + `info` : Display the file system information.  
+   + `fs format` : Formats the file system.  
+   + `fs file PATH` : Reads from file specified `PATH` and displays read data.  
+   + `fs remove PATH` : Remove file specified `PATH`.  
+   + `fs rename PATH NEW_PATH` :  Rename file specified `PATH` to `NEW_PATH`.
+   
+7. **gpio**  
+   Gets or sets GPIO port value. 
+   ```
+   gpio get PORT_NUM
+   gpio set PORT_NUM low | high
+   ```
+   <img  align="right" alt="esp12_pins" width="320" src="https://arduino-esp8266.readthedocs.io/en/latest/_images/esp12.png">`gpio` command operates on the specified GPIO. It is available 0 (**GPIO0**) to 16 (**GPIO16**) but there are limitations. The following is a quote from [ESP8266 Arduino Core's documentation](https://arduino-esp8266.readthedocs.io/en/latest/reference.html#digital-io):  
+   > The diagram below shows pin mapping for the popular ESP-12 module. Digital pins 6—11 are not shown on this diagram because they are used to connect flash memory chip on most modules. Trying to use these pins as IOs will likely cause the program to crash.  
+
+   So 6 to 11 can not be specified for safety reasons.  
+   + `get PORT_NUM` : Reads the status of GPIO specified `PORT_NUM`. The port value is read digitally and is either `LOW` or `HIGH`. At that time the **pinMmode** is not changed.  
+   + `set PORT_NUM low | high` : Sets the specified `PORT_NUM` to `low` or `high`.
+
+8. **http**  
    Issues the GET method to specified Web site or define web page as plain texts.
    ```
    http get URL
@@ -157,7 +201,7 @@ Enter `help` or `?` will display commands list.
      + `http get http://www.google.com/` will display the response from the google server. At this time, ESP8266 module must be connected to Internet via the other AP with STA mode or AP_STA mode.  
      + `http on /hello Hello, world!` creates 'Hello, world!' page in the internal Web server of ESPShaker. When a client like smartphone accesses to uri of ESPShaker which running in AP mode (e.g. `http://192.168.4.1/hello`), it should see the `Hello, world!` created by `http on` command.
 
-7. mode  
+9. **mode**  
    Set Wi-Fi working mode to Station mode (WIFI_STA), SoftAP (WIFI_AP) or Station + SoftAP (WIFI_APSTA), and save it in flash. Immediately after resetting, the default mode is SoftAP mode.
    ```
    mode ap | sta | apsta | off
@@ -167,13 +211,20 @@ Enter `help` or `?` will display commands list.
    `apsta` : Set WIFI_APSTA mode.  
    `off` : Shutdown Wi-Fi working.  
 
-8. scan  
+10. **reset**  
+    Reset the module.
+    ```
+    reset
+    ```
+    This command invokes `ESP.reset()` function.
+
+11. **scan**  
    Scan all available APs.
    ```
    scan
    ```
 
-9. show  
+12. **show**  
    Display current module saved values as follows.  
    ```
    show
@@ -181,7 +232,7 @@ Enter `help` or `?` will display commands list.
    The show command allows displaying the following information.  
    + Auto-connect setting.  
    + Host name.  
-   + SoftAP MAC Adress.  
+   + SoftAP MAC Address.  
    + SoftAP IP address.  
    + Local MAC Address.
    + Station local IP address.  
@@ -191,7 +242,7 @@ Enter `help` or `?` will display commands list.
    + Saved PSK.  
    + Chip configuration.
 
-10. sleep  
+13. **sleep**  
     Set sleep mode or embarks a deep sleep.
     ```
     sleep none | light | modem
@@ -201,10 +252,11 @@ Enter `help` or `?` will display commands list.
       - `none` :  Disable power saving.
       - `light` : Enable Light-sleep mode.
       - `modem` : Enable Modem-sleep mode. 
-    - `sleep deep` command invokes `ESP.deepSleep` API. It automatically wakes up when `SLEEP_TIME` out. Upon waking up, ESP8266 boots up from setup(), but *GPIO16* and *RST* must be connected. For reference, *GPIO16* is assigned to *D0* on **ESP-12** (NodeMCU) and is **not connected** to external pin with **ESP-01**.
+    - `sleep deep` command invokes **ESP.deepSleep** API. It automatically wakes up when `SLEEP_TIME` out.  
+     Upon waking up, ESP8266 boots up from setup(), but *GPIO16* and *RST* must be connected. For reference, *GPIO16* is assigned to *D0* on **ESP-12** (NodeMCU) and is **not connected** to external pin with **ESP-01**.
       - `SLEEP_TIME` : Time from deep sleep to waking up (in microseconds unit).  
 
-11. smartconfig  
+14. **smartconfig**  
    Start or stop Smart Config by ESP-TOUCH.<img  align="right" alt="esp-touch" src="https://user-images.githubusercontent.com/12591771/33641022-18f32c64-da77-11e7-8492-5460b78d4466.png">
    ```
    smartconfig start | stop | done
@@ -213,75 +265,75 @@ Enter `help` or `?` will display commands list.
    ESP-TOUCH Apps for smartphone are released iOS and Android both. *ESP8266 SmartConfig* for iOS is [here](https://itunes.apple.com/jp/app/espressif-esptouch/id1071176700) and for Android is [here](https://play.google.com/store/apps/details?id=com.cmmakerclub.iot.esptouch). So it can be established ESP8266 to the new AP which is connected with smartphone already.  
    - `start` : Start Smart Config. Transits to this mode, then turns on the SmartConfig Apps on a smartphone manually.
    - `stop` : Stop Smart Config.
-   - `done` : Inquery a status of Smart Config.
+   - `done` : Inquiry a status of Smart Config.
 
-12. softap  
+15. **softap**  
    Start SoftAP operation.
    ```
-   softap SSID PASS
+   softap SSID PASSPHRASE
    ```
    `SSID` : Specify SSID for SoftAP.  
-   `PASS` : Specify pass-phrase for the SSID.
+   `PASSPHRASE` : Specify passphrase for the SSID.
 
-13. start  
+16. **start**  
     Start Web server, DNS server, mDNS service.
     ```
     start web
     start dns DOMAIN
     start mdns HOST_NAME SERVICE PROTOCOL [PORT]
     ```
-    - `start web` command starts web server inside ESPShaker. The http port assumed #80.  
-    - `start dns` command starts DNS server inside ESPShaker. The dns port assuemd #53. To start the DNS server, the domain name is needed in the operand. It domain's IP address would be assumed SoftAPIP.  
+    - `start web` command starts web server inside ESPShaker. The http port assumed **#80**.  
+    - `start dns` command starts DNS server inside ESPShaker. The dns port assumed **#53**.  
+    To start the DNS server, the domain name is needed in the operand. It domain's IP address would be assumed SoftAPIP. At DNS server started, the error reply code would be set to `DNSReplyCode::NoError`.  
       - `DOMAIN` : Specify domain name.  
     - `start mdns` command starts mDNS responder.  
        - `HOST_NAME` : Specify mDNS host name. Actual host name would be resolved as 'HOST_NAME.local'.  
        - `SERVICE` : Specifies the service name to which mDNS responds. Like `http` for example.  
        - `PROTOCOL` : Specifies the protocol like `tcp`.  
-       - `PORT` : Specifies the port of the service. When service is http, The port operand could be omitted and assumed #80.  
+       - `PORT` : Specifies the port of the service. When service is http, The port operand could be omitted and assumed **#80**.  
 
-14. station  
+17. **station**  
     Display number of connected stations for SoftAP.
     ```
     station
     ```
 
-15. status  
+18. **status**  
     Display current Wi-Fi status.
     ```
     status
     ```
     Display Wi-Fi connection status via WiFi.status() function. The return value described wl_status_t enum.
 
-16. stop  
+19. **stop**  
     Stop ESPShaker's internal server.
     ```
     stop web | dns
     ```
-    `web` : Stop web server.  
+    `web` : Stop Web server.  
     `dns` : Stop DNS server.
 
-17. wps  
+20. **wps**  
     Begin WPS configuration.
     ```
     wps
     ```
 
-18. reset  
-    Reset the module.
-    ```
-    reset
-    ```
-    This command invokes `ESP.reset()` function.
-
 
 ### Change log
+
+#### [1.02] 2017-12-08
+- Supports **fs** command.
+- Supports **gpio** command.
+- Fixed crash when **apconfig** command's IP address was not specified.
+- Changed **apconfig**'s IP address default value.
 
 #### [1.01] 2017-12-06
 - Supports **event** command.
 - Supports **sleep** command.
 - Supports **smartconfig** command.
 - Supports **wps** command.
-- Add sleep mode status in show command.
+- Added sleep mode status in show command.
 
 #### [1.0] 2017-11-23
 - First Release.

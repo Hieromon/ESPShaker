@@ -1,6 +1,6 @@
 .vs/
-_vm/
-_debug/
+__vm/
+debug/
 img/
 *.tmp
 *.sln

@@ -218,18 +218,21 @@ void fileSystem() {
                             if (op == "file") {
                                 char buff[128] = { 0 };
                                 File f = SPIFFS.open(path, "r");
-                                int fileSize = f.size();
-                                Serial.println(String(fileSize) + "bytes");
-                                while (fileSize > 0 || fileSize == -1) {
-                                    size_t	availSize = f.available();
-                                    if (availSize) {
-                                        int	blkSize = f.readBytes(buff, ((availSize > sizeof(buff)) ? sizeof(buff) : availSize));
-                                        Serial.write(buff, blkSize);
-                                        if (fileSize > 0)
-                                            fileSize -= blkSize;
+                                if (f) {
+                                    int fileSize = f.size();
+                                    Serial.println(String(fileSize) + "bytes");
+                                    while (fileSize > 0 || fileSize == -1) {
+                                        size_t  availSize = f.available();
+                                        if (availSize) {
+                                            int blkSize = f.readBytes(buff, ((availSize > sizeof(buff)) ? sizeof(buff) : availSize));
+                                            Serial.write(buff, blkSize);
+                                            if (fileSize > 0)
+                                                fileSize -= blkSize;
+                                        }
+                                        delay(1);
                                     }
-                                    delay(1);
                                 }
+                                else { Serial.println("open failed."); }
                             }
                             else if (op == "remove") {
                                 Serial.println();

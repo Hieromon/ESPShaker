@@ -35,6 +35,8 @@ SerialCommand::SerialCommand()
 {
 	strcpy(delim, " "); // strtok_r needs a null-terminated string
 	clearBuffer();
+    precedingBuffer = "";
+    anc = 0;
 }
 
 /**
@@ -57,13 +59,12 @@ void SerialCommand::addCommand(const char *command, void(*function)()) {
 }
 
 /**
-* This sets up a handler to be called in the event that the receveived command string
+* This sets up a handler to be called in the event that the received command string
 * isn't in the list of commands.
 */
 void SerialCommand::setDefaultHandler(void(*function)(const char *)) {
 	defaultHandler = function;
 }
-
 
 /**
 * This checks the Serial stream for characters, and assembles them into a buffer.
@@ -71,65 +72,83 @@ void SerialCommand::setDefaultHandler(void(*function)(const char *)) {
 * buffer for a prefix command, and calls handlers setup by addCommand() member
 */
 void SerialCommand::readSerial() {
-	while (Serial.available() > 0) {
-		char inChar = Serial.read();   // Read single available character, there may be more waiting
-#ifdef SERIALCOMMAND_DEBUG
-		Serial.print(inChar);   // Echo back to serial stream
-#endif
+    // Reads all received characters.
+    int availSize;
+    while ((availSize = Serial.available()) > 0) {
+        uint8_t u_blk[129] = { 0 };
+        Serial.readBytes(u_blk, ((availSize < (int)(sizeof(u_blk) - 1) ? availSize : sizeof(u_blk) - 1)));
+        precedingBuffer.concat((const char *)u_blk);
+    }
 
-		if (inChar == term) {     // Check for the terminator (default '\r') meaning end of command
+    // Fetch command string terminated by EOC as the term from precedingBuffer
+    //  to command buffer.
+    unsigned int pc;
+    for (pc = 0; pc < precedingBuffer.length(); pc++) {
+        char inChar = precedingBuffer.charAt(pc);
 #ifdef SERIALCOMMAND_DEBUG
-			Serial.print("Received: ");
-			Serial.println(buffer);
+        Serial.print(inChar);   // Echo back to serial stream
 #endif
+        if (inChar == term) {
+            buffer[anc] = '\0';
+#ifdef SERIALCOMMAND_DEBUG
+            Serial.print("Received: ");
+            Serial.println(buffer);
+#endif
+            // Search for command.
+            char *command = strtok_r(buffer, delim, &last);
+            if (command != NULL) {
+                boolean matched = false;
+                for (uint8_t i = 0; i < commandCount; i++) {
+#ifdef SERIALCOMMAND_DEBUG
+                    Serial.print("Comparing [");
+                    Serial.print(command);
+                    Serial.print("] to [");
+                    Serial.print(commandList[i].command);
+                    Serial.println("]");
+#endif
+                    if (strncmp(command, commandList[i].command, SERIALCOMMAND_MAXCOMMANDLENGTH) == 0) {
+#ifdef SERIALCOMMAND_DEBUG
+                        Serial.print("Matched Command: ");
+                        Serial.println(command);
+#endif
+                        matched = true;
+                        // Execute the stored handler function for the command
+                        (*commandList[i].function)();
+                        break;
+                    }
 
-			char *command = strtok_r(buffer, delim, &last);   // Search for command at start of buffer
-			if (command != NULL) {
-				boolean matched = false;
-				for (int i = 0; i < commandCount; i++) {
-#ifdef SERIALCOMMAND_DEBUG
-					Serial.print("Comparing [");
-					Serial.print(command);
-					Serial.print("] to [");
-					Serial.print(commandList[i].command);
-					Serial.println("]");
-#endif
+                }
+                if (!matched && (defaultHandler != NULL)) {
+                	(*defaultHandler)(command);
+                }
+            }
 
-					// Compare the found command against the list of known commands for a match
-					if (strncmp(command, commandList[i].command, SERIALCOMMAND_MAXCOMMANDLENGTH) == 0) {
+            // Dispose current command.
+            anc = 0;
+            break;
+        }
+        else if (inChar == '\b') {
+            if (anc > 0)
+                buffer[--anc] = '\0';
+        }
+        else if (isprint(inChar)) {
+            if (anc < SERIALCOMMAND_BUFFER) {
+                buffer[anc++] = inChar;
+                buffer[anc] = '\0';
+            }
 #ifdef SERIALCOMMAND_DEBUG
-						Serial.print("Matched Command: ");
-						Serial.println(command);
+            else
+                Serial.println("Line buffer is full - increase SERIALCOMMAND_BUFFER");
 #endif
+        }
+    }
 
-						// Execute the stored handler function for the command
-						(*commandList[i].function)();
-						matched = true;
-						break;
-					}
-				}
-				if (!matched && (defaultHandler != NULL)) {
-					(*defaultHandler)(command);
-				}
-			}
-			clearBuffer();
-		}
-		else if (isprint(inChar)) {     // Only printable characters into the buffer
-			if (bufPos < SERIALCOMMAND_BUFFER) {
-				buffer[bufPos++] = inChar;  // Put character into buffer
-				buffer[bufPos] = '\0';      // Null terminate
-			}
-			else {
-#ifdef SERIALCOMMAND_DEBUG
-				Serial.println("Line buffer is full - increase SERIALCOMMAND_BUFFER");
-#endif
-			}
-		}
-		else if (inChar == '\b') {
-			if (bufPos > 0)
-				buffer[--bufPos] = '\0';
-		}
-	}
+    // Relocate preceding buffer to the next command string.
+    precedingBuffer.remove(0, pc + 1);
+    if (precedingBuffer.length() <= 0) {
+        precedingBuffer.~String();
+        precedingBuffer = "";
+    }
 }
 
 /*

@@ -4,8 +4,8 @@
  *	they can be executed with interactive commands.
  *	@file	ESPShaker.ino
  *	@author	hieromon@gmail.com
- *	@version	1.02
- *	@date	2017-12-07
+ *	@version	1.03
+ *	@date	2017-12-21
  *	@copyright	MIT license.
  */
 
@@ -24,7 +24,7 @@ extern "C" {
     #include <user_interface.h>
 }
 
-#define _VERSION    "1.02"
+#define _VERSION    "1.03"
 
 class httpHandler : public RequestHandler {
 public:
@@ -119,21 +119,43 @@ void autoConnect() {
 }
 
 void beginWiFi() {
-    char*	c_ssid = Cmd.next();
-    char*	c_pass = Cmd.next();
+    bool    beginWait = false;
+    char*	c_ssid;
+    char*   c_pass;
+    char*   c_op = Cmd.next();
+    String  op = String(c_op);
 
     Serial.print("WiFi.begin(");
-    if (c_ssid) {
+    if (op == "#wait") {
+        beginWait = true;
+        WiFiStatus = WiFi.begin();
+    }
+    else {
+        c_ssid = c_op;
         Serial.print(c_ssid);
+        c_pass = Cmd.next();
+        op = String(c_pass);
+        if (op == "#wait") {
+            c_pass = nullptr;
+            beginWait = true;
+        }
+        else {
+            if (String(Cmd.next()) == "#wait")
+                beginWait = true;
+        }
         if (c_pass)
             Serial.print("," + String(c_pass));
+        WiFiStatus = WiFi.begin(c_ssid, c_pass);
     }
-    Serial.println(")");
-  if (c_ssid)
-    WiFiStatus = WiFi.begin(c_ssid, c_pass);
-  else
-    WiFiStatus = WiFi.begin();
+    Serial.print(") ");
+    if (beginWait) {
+        Serial.println("wait");
+    } else
+        Serial.println("nowait");
     PilotLED.Start(200, 100);
+    if (beginWait) {
+        WiFi.waitForConnectResult();
+    }
 }
 
 void beginWPS() {
@@ -143,8 +165,33 @@ void beginWPS() {
 }
 
 void disconnWiFi() {
-    Serial.println("WiFi.disconnect");
-    Serial.println(WiFi.disconnect() ? "OK" : "Fail");
+    String  ap = String(Cmd.next());
+    if (ap.length() == 0) {
+        WiFiStatus = WiFi.status();
+        Serial.println("WiFi.disconnect");
+        if (WiFi.disconnect()) {
+            Serial.println("OK");
+        }
+        else {
+            Serial.println("Fail");
+        }
+    }
+    else {
+        if (ap == "ap") {
+            Serial.println("WiFi.softAPdisconnect");
+            Serial.println(WiFi.softAPdisconnect() ? "OK" : "Fail");
+        }
+    }
+    Serial.print("> ");
+}
+
+void doDelay() {
+    String  s_ms = String(Cmd.next());
+    if (s_ms.length() > 0) {
+        unsigned long ms = s_ms.toInt();
+        Serial.println("delay " + String(ms));
+        delay(ms);
+    }
     Serial.print("> ");
 }
 
@@ -333,6 +380,17 @@ void scan() {
         }
         String	ssid = WiFi.SSID(i).length() > 0 ? WiFi.SSID(i) : "?";
         Serial.println("BSSID<" + WiFi.BSSIDstr(i) + "> SSID:" + ssid + " RSSI(" + String(WiFi.RSSI(i)) + ") CH(" + String(WiFi.channel(i)) + ") " + encType);
+    }
+    Serial.print("> ");
+}
+
+void setPersistent() {
+    String sw = String(Cmd.next());
+    sw.toLowerCase();
+    if (sw == "on" || sw == "off") {
+        Serial.println("WiFi.persistent(" + sw + ")");
+        WiFi.persistent(sw == "on" ? true : false);
+        Serial.println("OK");
     }
     Serial.print("> ");
 }
@@ -854,8 +912,9 @@ void http() {
                 String	content = "";
                 char*	c_content;
                 while ((c_content = Cmd.next())) {
+                    if (content.length() > 0)
+                        content += ' ';
                     content.concat(c_content);
-                    content += ' ';
                 }
                 char*	c_contentPool = (char*)malloc(content.length() + 1);
                 if (c_contentPool) {
@@ -915,20 +974,22 @@ typedef struct _command {
 static const commandS	commands[] = {
     { "apconfig", "[AP_IP] [GW_IP] [NETMASK]", softAPConfig },
     { "autoconnect", "on|off", autoConnect },
-    { "begin", "[SSID] [PASSPHRASE]", beginWiFi },
-    { "discon", "", disconnWiFi },
+    { "begin", "[SSID [PASSPHRASE]] [#wait]", beginWiFi },
+    { "delay", "MILLISECONDS", doDelay },
+    { "discon", "[ap]", disconnWiFi },
     { "event", "on|off", doEvent },
     { "fs", "start|dir|{file PATH}|format|info|{remove PATH}|{rename PATH NEW_PATH}", fileSystem },
     { "gpio", "{get PORT_NUM}|{set PORT_NUM high|low}", gpio },
     { "heap", "", freeHeap },
     { "http", "{get url}|{on uri PAGE_CONTENT}", http },
     { "mode", "ap|sta|apsta|off", setWiFiMode },
+    { "persistent", "on|off", setPersistent },
     { "reset", "", reset },
     { "scan", "", scan },
     { "sleep", "none|light|modem|{deep SLEEP_TIME}", setSleep },
     { "smartconfig", "start|stop|done", smartConfig },
     { "show", "", showConfig },
-    { "softap", "{SSID [PASSPHRASE]}|'discon'", softAP },
+    { "softap", "{SSID [PASSPHRASE]}|discon", softAP },
     { "start", "web|{dns domain}|{mdns HOST_NAME SERVICE PROTOCOL [PORT]}", startServer },
     { "station", "", station },
     { "status", "", showStatus },
@@ -960,8 +1021,9 @@ void setup() {
     Cmd.setDefaultHandler(unrecognized);
     Serial.printf("ESPShaker %s - %08x,Flash:%u,SDK%s\r\n", _VERSION, ESP.getChipId(), ESP.getFlashChipRealSize(), system_get_sdk_version());
     Serial.println("Type \"help\", \"?\" for commands list.");
+
     showWiFiMode();
-    WiFi.onEvent(wifiEvent);
+    WiFi.onEvent(wifiEvent, WIFI_EVENT_ANY);
 }
 
 void loop() {
@@ -970,14 +1032,16 @@ void loop() {
         PilotLED.Start(800, 600);
         WiFiStatus = cs;
         showStatus();
-        if (WiFiStatus == WL_CONNECTED)
+        if (WiFiStatus == WL_CONNECTED) {
             if (inSmartConfig) {
                 Serial.println("Smart Config completed, SSID:" + WiFi.SSID());
                 Serial.print("WiFi.LocalIP:");
                 Serial.println(WiFi.localIP());
                 inSmartConfig = false;
             }
+        }
     }
+    
     WiFiMode_t	cm = WiFi.getMode();
     if (cm != WiFiMode) {
         if (cm == WIFI_OFF) {
@@ -987,7 +1051,9 @@ void loop() {
         else { PilotLED.Start(); }
         WiFiMode = cm;
     }
+
     Cmd.readSerial();
+
     if (onDnsserver)
         DnsServer.processNextRequest();
     if (WebServer != nullptr)

@@ -3,6 +3,7 @@ __vm/
 debug/
 img/
 *.tmp
+*.TMP
 *.sln
 *.vcxproj
 *.vcxproj.filters

@@ -70,6 +70,9 @@ private:
 	char buffer[SERIALCOMMAND_BUFFER + 1]; // Buffer of stored characters while waiting for terminator character
 	byte bufPos;                        // Current position in the buffer
 	char *last;                         // State variable used by strtok_r during processing
+
+    String precedingBuffer;     // Buffer for preceding from RXD.
+    uint8_t anc;                // command character obtaining anchor to the buffer.
 };
 
 #endif //SerialCommand_h

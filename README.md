@@ -210,7 +210,7 @@ Enter `help` or `?` will display commands list.
    `URL` : Specify url to GET like `http://www.example.com/bar.html`.  
    + **'http on'** command dynamically creates a simple web page consisting only of text with the following operands.  
    `URI` : Specify uri of the simple web page to be created.  
-   `PAGE_CONTENT` : A page content text. However, it can include simple HTML tags.  
+   `PAGE_CONTENT` : A page content text. However, it can include simple HTML tags. It is also possible to specify content files on SPIFFS. Specify by appending the prefix `file:` to the file name, it will automatically read that file.  
    + e.g.  
      + `http get http://www.google.com/` will display the response from the Google server. At this time, ESP8266 module must be connected to Internet via the other AP with STA mode or AP_STA mode.  
      + `http on /hello Hello, world!` creates 'Hello, world!' page in the embedded Web server of ESPShaker. When a client such as a smartphone accesses the uri that is running the ESPShaker embedded web server, its web page prepared by **http on** is available.  
@@ -306,13 +306,13 @@ Enter `help` or `?` will display commands list.
     Start Web server, DNS server, mDNS service.
     ```
     start web
-    start dns DOMAIN
+    start dns [DOMAIN]
     start mdns HOST_NAME SERVICE PROTOCOL [PORT]
     ```
     - **'start web'** command starts web server inside ESPShaker. The http port assumed **#80**.  
     - **'start dns'** command starts DNS server inside ESPShaker. The dns port assumed **#53**.  
     To start the DNS server, the domain name is needed in the operand. It domain's IP address would be assumed SoftAPIP. At DNS server started, the error reply code would be set to `DNSReplyCode::NoError`.  
-      - `DOMAIN` : Specify domain name.  
+      - `DOMAIN` : Specify domain name. It assumes `*` if specified **DOMAIN** is missing. 
     - **'start mdns'** command starts mDNS responder.  
        - `HOST_NAME` : Specify mDNS host name. Actual host name would be resolved as 'HOST_NAME.local'.  
        - `SERVICE` : Specifies the service name to which mDNS responds. Like `http` for example.  
@@ -360,6 +360,9 @@ Executed as follows.
 ESP8266 UART RX buffer size is 128 bytes also ESPShaker has 128 bytes command buffer. The USB Serial bridge interface fetches the contents of the received packet to the hardware buffer all at once. But ESP8266 SDK does not support hardware flow control and RX interrupt can not be properly controlled from the sketch. So at this way, a whole sending data may not be received.
 
 ### Change log
+
+#### [1.04] 2017-12-27
+- Changed **DOMAIN** operand default of **start dns** command.
 
 #### [1.03] 2017-12-21
 - Supports **delay** command.

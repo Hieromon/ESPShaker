@@ -4,8 +4,8 @@
  *	they can be executed with interactive commands.
  *	@file	ESPShaker.ino
  *	@author	hieromon@gmail.com
- *	@version	1.03
- *	@date	2017-12-21
+ *	@version	1.04
+ *	@date	2017-12-27
  *	@copyright	MIT license.
  */
 
@@ -24,16 +24,17 @@ extern "C" {
     #include <user_interface.h>
 }
 
-#define _VERSION    "1.03"
+#define _VERSION    "1.04"
 
 class httpHandler : public RequestHandler {
 public:
-    httpHandler() {};
-    ~httpHandler() {};
+    httpHandler(ESP8266WebServer* server) : _lordServer(server) {};
+    ~httpHandler() { _lordServer = nullptr; };
 
     bool canHandle(HTTPMethod method, String uri) override {
         Serial.println();
-        Serial.print("http request:");
+        Serial.print(_lordServer->client().localIP());
+        Serial.print(" http request:");
         switch (method) {
         case HTTP_ANY:
             Serial.print("ANY");
@@ -60,6 +61,7 @@ public:
             Serial.print("Unknown");
         };
         Serial.println("," + uri);
+        Serial.println("Host: " + _lordServer->hostHeader());
         Serial.print("> ");
         return false;
     }
@@ -69,6 +71,9 @@ public:
         Serial.print("> ");
         return false;
     }
+
+private:
+    ESP8266WebServer*   _lordServer;
 };
 
 #define	ONBOARD_LED	2
@@ -679,7 +684,7 @@ void startServer() {
             WebServer = new ESP8266WebServer(80);
         }
         if (webHandler == nullptr) {
-            webHandler = new httpHandler();
+            webHandler = new httpHandler(WebServer);
             WebServer->addHandler(webHandler);
         }
         WebServer->begin();
@@ -688,6 +693,8 @@ void startServer() {
     else if (sType == "dns") {
         uint16_t	port = 53;
         String		domain = String(Cmd.next());
+        if (domain.length() == 0)
+            domain = "*";
         Serial.print("DnsServer.start(");
         Serial.print(port);
         Serial.print("," + domain + ",");
@@ -897,9 +904,9 @@ void http() {
     }
     else if (req == "on") {
         if (webHandler == nullptr) {
-            webHandler = new httpHandler();
             if (WebServer == nullptr)
                 WebServer = new ESP8266WebServer(80);
+            webHandler = new httpHandler(WebServer);
             WebServer->addHandler(webHandler);
         }
         String	uri = String(Cmd.next());
@@ -990,7 +997,7 @@ static const commandS	commands[] = {
     { "smartconfig", "start|stop|done", smartConfig },
     { "show", "", showConfig },
     { "softap", "{SSID [PASSPHRASE]}|discon", softAP },
-    { "start", "web|{dns domain}|{mdns HOST_NAME SERVICE PROTOCOL [PORT]}", startServer },
+    { "start", "web|{dns [DOMAIN]}|{mdns HOST_NAME SERVICE PROTOCOL [PORT]}", startServer },
     { "station", "", station },
     { "status", "", showStatus },
     { "stop", "dns|web", stopServer },

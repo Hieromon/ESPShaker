@@ -271,7 +271,7 @@ Enter `help` or `?` will display commands list.
       - `#r` : Retains the message in the server and pass it to the new subscriber.  
     - `mqtt sub TOPIC [QoS]` : Subscribes to messages.  
       - `TOPIC` :  Specify the topic to subscribe.  
-      - `QoS` : Ssubscribe at 0 or 1. Default is 0.  
+      - `QoS` : Subscribe at 0 or 1. Default is 0.  
     - `mqtt sub stop` : Stops subscriptions for recently specified topic.  
     - `mqtt close` : Stops all subscriptions and close the connection with the server. However, the server information set by **mqtt server** is retained. 
 

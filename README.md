@@ -114,7 +114,7 @@ Enter `help` or `?` will display commands list.
 
 #### Command specifications
 
-1. **appconfig**  
+1. **apconfig**  
    Configure IPs of AP mode operation.
    ```
    apconfig [AP_IP] [GW_IP] [NETMASK]

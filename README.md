@@ -1,5 +1,6 @@
 ## ESPShaker
 *ESP8266 interactive serial command processor via Arduino core.* [![Build Status](https://travis-ci.org/Hieromon/ESPShaker.svg?branch=master)](https://travis-ci.org/Hieromon/ESPShaker)   
+**Version 1.1 released. Available client for MQTT to publish/subscribe messages, also EEPROM reads and writes.**
 
 It is implemented several APIs provided by ESP8266 arduino core so that they can be executed with interactive commands. You can control esp8266 interactively with the command via serial interface. With ESPShaker you can investigate the behavior of ESP8266, without having to write program code every time.  
 Since ESPShaker does not use the [AT SDK](http://espressif.com/en/support/download/at) provided by Espressif Systems, it can examine the pure behavior by [ESP8266 arduino core](https://github.com/esp8266/Arduino).  
@@ -13,8 +14,10 @@ Since ESPShaker does not use the [AT SDK](http://espressif.com/en/support/downlo
 * Supports *SmartConfig* with *ESP-TOUCH*
 * GPIO port I/O
 * SPIFFS file system handling
+* Supports EEPROM read and write
 * Built in Web server with http GET/PUT handling and DNS server, mDNS service
 * It can build simple web pages interactively for http response
+* MQTT message publish/subscribe providigation(Depends on [PubSubClient library](https://pubsubclient.knolleary.net/))
 * Batch execution for a series of commands
 
 ### Works on
@@ -24,7 +27,7 @@ Required [Arduino IDE](http://www.arduino.cc/en/main/software) is current upstre
 
 ### Installation
 
-Download ESPShaker file as a zip from this repository, and extract the resulting folder into your Arduino sketch folder and build it with Arduino IDE. In addition to this file, two external libraries are required as [PseudoPWM](https://github.com/Hieromon/PseudoPWM) for LED blinking and [PageBuilder](https://github.com/Hieromon/PageBuilder) for html page dynamic creation.  
+Download ESPShaker file as a zip from this repository, and extract the resulting folder into your Arduino sketch folder and build it with Arduino IDE. In addition to this file, two external libraries are required as [PseudoPWM](https://github.com/Hieromon/PseudoPWM) for LED blinking and [PageBuilder](https://github.com/Hieromon/PageBuilder) for html page dynamic creation. Also [PubSubClient library](https://github.com/knolleary/pubsubclient/releases/latest) is required for subscribing and publishing messages according to the MQTT protocol.  
 Then open the serial monitor and reset the ESP8266 module. If ESPShaker is working properly the current WiFi status will be displayed on the serial monitor. The serial monitor's baudrate is 115200 bps.
 
 ### Usage
@@ -86,11 +89,13 @@ Enter `command` and `operand` separated by blanks. Depending on the command, it 
 | begin | Begin WiFi communication | WiFi.begin |
 | delay | Delay milliseconds | delay |
 | discon | Disconnect WiFi | WiFi.disconnect |
+| eeprom | read and write eeprom data | EEPROM.read, EEPROM.write |
 | event | Notify WiFi event occurrence | WiFi.onEvent |
 | fs | SPIFFS file system handling | SPIFFS |
 | gpio | GPIO access | deigitalRead, digitalWrite |
 | http | Issues HTTP GET method or Register web page | HTTPClient.begin and get, ESP8266WebServer.addHandler |
 | mode | Set Wi-Fi working mode | WiFi.mode |
+| mqtt | MQTT message publish/subscribe | Depends on PubSubClient library |
 | persistent | Set whether to store WiFi working mode in flash memory | WiFi.persistent |
 | reset | Reset esp8266 module | ESP.reset |
 | scan | Scan all available APs | WiFi.scanNetworks |
@@ -152,7 +157,22 @@ Enter `help` or `?` will display commands list.
    ```
    `ap` : Disconnect station from ESP8266 in SoftAP mode by **WiFi.softAPdisconnect**. If this operand is not specified, it disconnects ESP8266 from the access point by **WiFi.disconnect**.
 
-6. **event**  
+6. **eeprom**  
+   Read and  write to EEPROM.
+   ```
+   eeprom addr [ADDRESS]
+   eeprom clear BYTE LENGTH
+   eeprom write DATA
+   eeprom read LENGTH
+   ```
+   + `eeprom addr [ADDRESS]` : Display current EEPROM address, If **ADDRESS** is specified then the current address changed to it.
+   + `eeprom clear BYTE LENGTH` : Fill the area of **LENGTH** size from the current address with **BYTE**.
+   + `eeprom write DATA` : Writes **DATA** to the current address of EEPROM.
+   + `eeprom read LENGTH` : Display data with **LENGTH** size from the current address of EEPROM.  
+
+   The each parameter as **ADDRESS**, **LENGTH**, **BYTE** and **DATA** are hexadecimal. **BYTE** is 2-digits hexadecimal is actually. **DATA** can be specified with continuous long hexadecimal digit like as `68656c6c6f2c20776f726c64`. The **clear**, **write** and **read** commands automatically increment the current EEPROM address. **ADDRESS** ranges from 0 to FFF are valid and if the address reached at end of EEPROM, it rounds to 0.  
+
+7. **event**  
    Detects events with **WiFi.onEvent** method and displays events.
    ```
    event on | off
@@ -168,7 +188,7 @@ Enter `help` or `?` will display commands list.
    > ... WiFi client was connected.  
    > [event]:5 (WIFI_EVENT_SOFTAPMODE_STACONNECTED)  
 
-7. **fs**  
+8. **fs**  
    Handles SPIFFS file system.
    ```
    fs start
@@ -187,7 +207,7 @@ Enter `help` or `?` will display commands list.
    + `fs remove PATH` : Remove file specified `PATH`.  
    + `fs rename PATH NEW_PATH` :  Rename file specified `PATH` to `NEW_PATH`.
    
-8. **gpio**  
+9. **gpio**  
    Gets or sets GPIO port value. 
    ```
    gpio get PORT_NUM
@@ -200,7 +220,7 @@ Enter `help` or `?` will display commands list.
    + `get PORT_NUM` : Reads the status of GPIO specified `PORT_NUM`. The port value is read digitally and is either `LOW` or `HIGH`. At that time the **pinMode** is not changed.  
    + `set PORT_NUM low | high` : Sets the specified `PORT_NUM` to `low` or `high`.
 
-9. **http**  
+10. **http**  
    Issues the GET method to specified Web site or define web page as plain texts.
    ```
    http get URL
@@ -219,7 +239,7 @@ Enter `help` or `?` will display commands list.
      <br>In the above, switch to SoftAP mode and register **/hello** page contents with **'http on'** command. Then start and access the embedded Web server with **'start web'** command. A response from /hello looks like as below. If not registered page is accessed a response of 404 will appear.  
      <br>![r_sc_helloworld](https://user-images.githubusercontent.com/12591771/34244216-a2fa4cde-e667-11e7-94b4-48ec62f3212c.png) &nbsp;&nbsp; ![r_sc_404](https://user-images.githubusercontent.com/12591771/34244243-b5f98cd2-e667-11e7-9655-524afbf4085e.png)  
 
-10. **mode**  
+11. **mode**  
    Set Wi-Fi working mode to Station mode (**WIFI_STA**), SoftAP (**WIFI_AP**) or Station + SoftAP (**WIFI_APSTA**), and save it in flash. Immediately after resetting, the default mode is SoftAP mode.
    ```
    mode ap | sta | apsta | off
@@ -229,7 +249,45 @@ Enter `help` or `?` will display commands list.
    `apsta` : Set WIFI_APSTA mode.  
    `off` : Shutdown Wi-Fi working.  
 
-11. **persistent**  
+12. **mqtt**  
+    Publish/subscribe messages between ESP8266 and a server using the MQTT protocol. The actual execution of this command is based on the PubSubClient library. The **mqtt** command does **not** definitely the native support for MQTT over **Websockets**.
+    ```
+    mqtt server SERVER [PORT]
+    mqtt con CLIENT_ID USER PASSWORD
+    mqtt pub TOPIC PAYLOAD [#r]
+    mqtt sub TOPIC [QoS] | stop
+    mqtt close
+    ```
+    - `mqtt server SERVER [PORT]` : Sets the MQ Telemetry Transport message broker address as the server and specifies used port.  
+      - `SERVER` : The mqtt broker address. It can be specified domain or IP address.  
+      - `PORT` : Port used for MQTT protocol. Default port is 1883. To use encrypted communication with TLS, specify 8883. ESPShaker does not supported client certificate with port 8884. 
+    - `mqtt con CLIENT_ID USER PASSWORD` : Connects ESP8266 as a **CLIENT_ID** to the server along with specified **USER** and **PASSWORD**.  
+      - `CLIENT_ID` : The identifier string that identifies a MQTT client. Each identifier must be unique to only one connected client at a time.  
+      - `USER` : Specify the user name to connect to the server.  
+      - `PASSWORD` : Specify the password to connect to the server.  
+    - `mqtt pub TOPIC PAYLOAD [#r]` : Publishes a message described in **PAYLOAD** to the specified **TOPIC**.   
+      - `TOPIC` :  The message topic.  
+      - `PAYLOAD` :  The message payload.  
+      - `#r` : Retains the message in the server and pass it to the new subscriber.  
+    - `mqtt sub TOPIC [QoS]` : Subscribes to messages.  
+      - `TOPIC` :  Specify the topic to subscribe.  
+      - `QoS` : Ssubscribe at 0 or 1. Default is 0.  
+    - `mqtt sub stop` : Stops subscriptions for recently specified topic.  
+    - `mqtt close` : Stops all subscriptions and close the connection with the server. However, the server information set by **mqtt server** is retained. 
+
+    To send and receive messages with the **mqtt** command, first specify the server with the **mqtt server**. Then connect as client with the **mqtt con**. For example, the MQTT message using Watson IoT on IBM Bluemix is as follows.
+
+    > \> mqtt server **YOUR_ORG**.messaging.internetofthings.ibmcloud.com 8883  
+    > \> mqtt con d:**YOUR_ORG**:**DEVICE_TYPE**:**DEVICE** use-token-auth **DEVICE_TOKEN**  
+    > \> mqtt sub iot-2/cmd/+/fmt/json  
+    > \> mqtt pub iot-2/evt/eid/fmt/json {"d":{"GPIO2":false}}  
+    > [info] mqtt topic:iot-2/cmd/cid/fmt/json  
+    > [info] mqtt payload(13):  
+    > 000  7b 22 52 53 54 22 3a 22 ef bc 90 22 7d  {"RST":"０"}  
+
+    This procedure publish an **evt** event as **{"d":{"GPIO2":false}}** while subscribing to **cmd** topic. When **cmd** as ** {"RST":"０"}** coded by UTF-8 is published to the server, its payload is displayed automatically.
+
+13. **persistent**  
     Set whether to store WiFi working mode in flash memory.
     ```
     persistent on | off
@@ -238,20 +296,20 @@ Enter `help` or `?` will display commands list.
     `off` : WiFi current working mode is not stored. It would be restored previously after reset.  
     The working mode at the time when **persistent** is `on` is not memorized. It would be memorized from **after setting** `on`.
 
-12. **reset**  
+14. **reset**  
     Reset the module.
     ```
     reset
     ```
     This command invokes `ESP.reset()` function.
 
-13. **scan**  
+15. **scan**  
    Scan all available APs.
    ```
    scan
    ```
 
-14. **show**  
+16. **show**  
    Display current module saved values as follows.  
    ```
    show
@@ -267,9 +325,11 @@ Enter `help` or `?` will display commands list.
    + Subnet mask.  
    + Saved SSID.  
    + Saved PSK.  
+   + RSSI.  
    + Chip configuration.
+   + Free heap size.  
 
-15. **sleep**  
+17. **sleep**  
     Set sleep mode or embarks a deep sleep.
     ```
     sleep none | light | modem
@@ -283,7 +343,7 @@ Enter `help` or `?` will display commands list.
      Upon waking up, ESP8266 boots up from setup(), but *GPIO16* and *RST* must be connected. For reference, *GPIO16* is assigned to *D0* on **ESP-12** (NodeMCU) and is **not connected** to external pin with **ESP-01**.
       - `SLEEP_TIME` : Time from deep sleep to waking up (in microseconds unit).  
 
-16. **smartconfig**  
+18. **smartconfig**  
    Start or stop Smart Config by ESP-TOUCH.<img  align="right" alt="esp-touch" src="https://user-images.githubusercontent.com/12591771/33641022-18f32c64-da77-11e7-8492-5460b78d4466.png">
    ```
    smartconfig start | stop | done
@@ -294,7 +354,7 @@ Enter `help` or `?` will display commands list.
    - `stop` : Stop Smart Config.
    - `done` : Inquiry a status of Smart Config.
 
-17. **softap**  
+19. **softap**  
    Start SoftAP operation.
    ```
    softap SSID PASSPHRASE
@@ -302,7 +362,7 @@ Enter `help` or `?` will display commands list.
    `SSID` : Specify SSID for SoftAP.  
    `PASSPHRASE` : Specify Passphrase for the SSID.
 
-18. **start**  
+20. **start**  
     Start Web server, DNS server, mDNS service.
     ```
     start web
@@ -319,20 +379,20 @@ Enter `help` or `?` will display commands list.
        - `PROTOCOL` : Specifies the protocol like `tcp`.  
        - `PORT` : Specifies the port of the service. When service is http, The port operand could be omitted and assumed **#80**.  
 
-19. **station**  
+21. **station**  
     Display number of connected stations for SoftAP.
     ```
     station
     ```
 
-20. **status**  
+22. **status**  
     Display current Wi-Fi status.
     ```
     status
     ```
     Display Wi-Fi connection status via WiFi.status() function. The return value described wl_status_t enum.
 
-21. **stop**  
+23. **stop**  
     Stop ESPShaker's internal server.
     ```
     stop web | dns
@@ -340,7 +400,7 @@ Enter `help` or `?` will display commands list.
     `web` : Stop Web server.  
     `dns` : Stop DNS server.
 
-22. **wps**  
+24. **wps**  
     Begin WPS configuration.
     ```
     wps
@@ -360,6 +420,17 @@ Executed as follows.
 ESP8266 UART RX buffer size is 128 bytes also ESPShaker has 128 bytes command buffer. The USB Serial bridge interface fetches the contents of the received packet to the hardware buffer all at once. But ESP8266 SDK does not support hardware flow control and RX interrupt can not be properly controlled from the sketch. So at this way, a whole sending data may not be received.
 
 ### Change log
+
+#### [1.1] 2018-01-31
+- Supports **eeprom** command.
+- Supports **mqtt** command.
+- Added **Arduino core version** to **show** command output.
+- Added **Chip ID** to **show** command output.
+- Added **Free heap size** to **show** command output.
+- Added **RSSI** to **show** command output.
+- Added **SPIFFS** file system size to **show** command output.
+- Added start offset of **EEPROM** to **show** command output.
+- Suppressed compiler diagnostic as -Wdeprecated-declarations for onEvent method.
 
 #### [1.04] 2017-12-27
 - Changed **DOMAIN** operand default of **start dns** command.
@@ -390,5 +461,5 @@ ESP8266 UART RX buffer size is 128 bytes also ESPShaker has 128 bytes command bu
 
 ### License
 
-ESPShaker is licensed under the [MIT License](LICENSE). Copyright &copy; 2017 hieromon@gmail.com  
+ESPShaker is licensed under the [MIT License](LICENSE). Copyright &copy; 2017-2018 hieromon@gmail.com  
 [Arduino-SerialCommand](https://github.com/kroimon/Arduino-SerialCommand) by [kroimon](https://github.com/kroimon) licensed under the [GNU General Public License](http://www.gnu.org/licenses/).

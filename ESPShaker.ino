@@ -4,27 +4,32 @@
  *	they can be executed with interactive commands.
  *	@file	ESPShaker.ino
  *	@author	hieromon@gmail.com
- *	@version	1.04
- *	@date	2017-12-27
+ *	@version	1.1
+ *	@date	2018-01-31
  *	@copyright	MIT license.
  */
 
 #include <functional>
 #include <stdio.h>
+#include <ctype.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <DNSServer.h>
 #include <ESP8266mDNS.h>
 #include <ESP8266HTTPClient.h>
+#include <EEPROM.h>
 #include <FS.h>
+#include <PubSubClient.h>
 #include "PseudoPWM.h"
 #include "SerialCommand.h"
 #include "PageBuilder.h"
 extern "C" {
     #include <user_interface.h>
 }
+extern "C" uint32_t _SPIFFS_start;
+extern "C" uint32_t _SPIFFS_end;
 
-#define _VERSION    "1.04"
+#define _VERSION    "1.1"
 
 class httpHandler : public RequestHandler {
 public:
@@ -91,11 +96,23 @@ String	MDNSProtocolName = "";
 bool	onDnsserver = false;
 bool    notifyEvent = false;
 bool    inSmartConfig = false;
+int     eepromAddress = 0;
 
-DNSServer			DnsServer;
-ESP8266WebServer	*WebServer = nullptr;
-HTTPClient			client;
-httpHandler*		webHandler = nullptr;
+DNSServer       DnsServer;
+ESP8266WebServer    *WebServer = nullptr;
+HTTPClient      httpClient;
+httpHandler*    webHandler = nullptr;
+WiFiClientSecure    *wifiClientSec = nullptr;
+WiFiClient      *wifiClient = nullptr;
+PubSubClient    mqttClient;
+uint16_t    mqttPort;
+String  mqttServer;
+String  mqttClientID;
+String  mqttAuth;
+String  mqttPassword;
+int     mqttState;
+String  mqttTopic;
+
 
 bool isNumber(String str) {
     uint8_t varLength = (uint8_t)str.length();
@@ -208,6 +225,173 @@ void doEvent() {
             notifyEvent = onoff == "on" ? true : false;
             Serial.println("WiFi.onEvent(" + onoff + ")");
         }
+    }
+    Serial.print("> ");
+}
+
+void eeprom() {
+    enum CMDERR {
+        CMDERR_NONE,
+        CMDERR_HEXFORMAT,
+        CMDERR_MISSING,
+        CMDERR_FLASH_SIZE,
+        CMDERR_COMMIT
+    };
+    CMDERR  err = CMDERR_NONE;
+    String  op = String(Cmd.next());
+    char*   p1_c = Cmd.next();
+    op.toLowerCase();
+    if (op == "addr" || op == "clear" || op == "write" || op == "read") {
+        int     p1x = eepromAddress;
+        char*   endp;
+        Serial.print("eeprom addr:");
+        if (p1_c) {
+            if (op != "write") {
+                int sa = (int)strtol(p1_c, &endp, 16);
+                if (*endp == '\0')
+                    p1x = sa;
+                else
+                    err = CMDERR_HEXFORMAT;
+            }
+        }
+        if (op == "addr") {
+            if (p1x >= SPI_FLASH_SEC_SIZE) {
+                err = CMDERR_FLASH_SIZE;
+            }
+            else {
+                eepromAddress = p1x;
+            }
+        }
+        Serial.printf("0x%03x", eepromAddress);
+        if (op != "addr") {
+            Serial.print(", " + op + ":");
+            if (!p1_c) {
+                err = CMDERR_MISSING;
+            }
+            if (err == CMDERR_NONE) {
+                EEPROM.begin(SPI_FLASH_SEC_SIZE);
+                if (op == "clear") {
+                    int   p2x = 0;
+                    char* p2_c = Cmd.next();
+                    if (p2_c) {
+                        p2x = strtol(p2_c, &endp, 16);
+                        if (*endp != '\0')
+                            err = CMDERR_HEXFORMAT;
+                        else if (p2x > SPI_FLASH_SEC_SIZE) {
+                            err = CMDERR_FLASH_SIZE;
+                        }
+                    }
+                    else
+                        err = CMDERR_MISSING;
+                    if (err == CMDERR_NONE) {
+                        Serial.printf("BYTE(0x%02x) LENGTH(0x%03x)", (uint8_t)p1x, p2x);
+                        while (p2x-- && eepromAddress < SPI_FLASH_SEC_SIZE)
+                            EEPROM.write(eepromAddress++, (uint8_t)p1x);
+                        if (p2x > 0)
+                            err = CMDERR_FLASH_SIZE;
+                    }
+                }
+                else if (op == "write") {
+                    bool even = strlen(p1_c) & 1 ? false : true;
+                    for (char* wc = p1_c; *wc; wc++) {
+                        uint8_t wd = 0;
+                        if (eepromAddress >= SPI_FLASH_SEC_SIZE) {
+                            err = CMDERR_FLASH_SIZE;
+                            break;
+                        }
+                        if ((*wc >= '0' && *wc <= '9') | (*wc >= 'a' && *wc <= 'f')) {
+                            if (even) {
+                                *wc = *wc >= 'a' ? *wc - 0x57 : *wc - '0';
+                                wd = *wc;
+                                wd <<= 4;
+                                wc++;
+                            }
+                            if (*wc) {
+                                *wc = *wc >= 'a' ? *wc - 0x57 : *wc - '0';
+                                wd += *wc;
+                            }
+                            EEPROM.write(eepromAddress++, wd);
+                            Serial.printf("%02x", wd);
+                            even = true;
+                        }
+                        else {
+                            err = CMDERR_HEXFORMAT;
+                            break;
+                        }
+                    }
+                }
+                else if (op == "read") {
+                    int rl = p1x;
+                    while (p1x > 0) {
+                        char    rb[16];
+                        uint8_t s = 0;
+                        Serial.println();
+                        if (eepromAddress >= SPI_FLASH_SEC_SIZE) {
+                            Serial.println("[warning] exceed eeprom size.");
+                            eepromAddress = 0;
+                        }
+                        Serial.printf("%03x ", eepromAddress);
+                        while (s < (rl > (int)sizeof(rb) ? (int)sizeof(rb) : rl)) {
+                            rb[s] = EEPROM.read(eepromAddress++);
+                            if (s == 8)
+                                Serial.print(' ');
+                            Serial.printf(" %02x", rb[s]);
+                            s++;
+                            p1x--;
+                            if (eepromAddress >= SPI_FLASH_SEC_SIZE) {
+                                break;
+                            }
+                        }
+                        for (int8_t bl = 16 - s; bl > 0; bl--) {
+                            if (bl == 8)
+                                Serial.print(' ');
+                            Serial.print("   ");
+                        }
+                        Serial.print("  ");
+                        for (uint8_t c = 0; c < s; c++) {
+                            if (c == 8)
+                                Serial.print(' ');
+                            if (iscntrl(rb[c]))
+                                rb[c] = '.';
+                            Serial.print(rb[c]);
+                        }
+                        rl = p1x;
+                    }
+                }
+
+                if (!EEPROM.commit()) {
+                    err = CMDERR_COMMIT;
+                }
+                delay(100);
+                EEPROM.end();
+            }
+        }
+
+        const char* errMes;
+        switch (err) {
+        case CMDERR_NONE:
+            errMes = "OK";
+            break;
+        case CMDERR_HEXFORMAT:
+            errMes = "[error] hexdecimal format.";
+            break;
+        case CMDERR_MISSING:
+            errMes = "[error] data or length missing.";
+            break;
+        case CMDERR_FLASH_SIZE:
+            errMes = "[error] exceed eeprom size.";
+            break;
+        case CMDERR_COMMIT:
+            errMes = "[error] commit failed.";
+            break;
+        }
+        if (eepromAddress >= SPI_FLASH_SEC_SIZE) {
+            eepromAddress = 0;
+            if (err == CMDERR_NONE)
+                errMes = "[warning] exceed eeprom size.";
+        }
+        Serial.println();
+        Serial.println(errMes);
     }
     Serial.print("> ");
 }
@@ -354,6 +538,205 @@ void gpio() {
     Serial.print("> ");
 }
 
+void mqtt() {
+    String  op = String(Cmd.next());
+    op.toLowerCase();
+    if (op == "server" || op == "con" || op == "pub" || op == "sub" || op == "close") {
+        Serial.print("mqtt " + op + " ");
+        const char* p1_c = Cmd.next();
+        if (op == "close") {
+            if (wifiClient != nullptr || wifiClientSec != nullptr) {
+                mqttClient.disconnect();
+            }
+            mqttTopic = String();
+            Serial.println();
+            Serial.println("OK");
+        }
+        else if (op == "server") {
+            uint16_t    port = 1883;
+            const char* port_c = Cmd.next();
+            if (port_c) {
+                char*   endp;
+                port = (uint16_t)strtol(port_c, &endp, 10);
+            }
+            if (p1_c) {
+                mqttServer = String(p1_c);
+                mqttPort = port;
+                if (port == 1883) {
+                    if (wifiClient == nullptr)
+                        wifiClient = new WiFiClient;
+                }
+                else if (port == 8883) {
+                    if (wifiClient == nullptr)
+                        wifiClientSec = new WiFiClientSecure;
+                }
+                else {
+                    Serial.println("[error] port " + String(port) + " is invalid.");
+                }
+                if (wifiClient != nullptr || wifiClientSec != nullptr) {
+                    Serial.println(mqttServer + "(" + String(port) + ")");
+                    Serial.println("OK");
+                }
+            }
+        }
+        else if (op == "con") {
+            if (p1_c) {
+                mqttClientID = String(p1_c);
+            }
+            const char* auth = Cmd.next();
+            if (auth) {
+                mqttAuth = String(auth);
+            }
+            const char* pass = Cmd.next();
+            if (pass) {
+                mqttPassword = String(pass);
+            }
+            if (p1_c && auth && pass) {
+                if (wifiClient != nullptr || wifiClientSec != nullptr) {
+                    Serial.print("client:" + String(p1_c) + " auth:" + String(auth) + "/" + String(pass));
+                    if (mqttPort == 8883) {
+                        mqttClient.setClient(*wifiClientSec);
+                    }
+                    else {
+                        mqttClient.setClient(*wifiClient);
+                    }
+                    mqttClient.setServer(mqttServer.c_str(), mqttPort);
+                    if (_mqttConnect()) {
+                        mqttClient.setCallback(_mqttSubscribe);
+                        Serial.println("OK");
+                    }
+                    else {
+                        Serial.println("failed. status=" + String(mqttClient.state()));
+                    }
+                }
+                else {
+                    Serial.println("[error] no server is set.");
+                }
+            }
+            else {
+                Serial.println("[error] certification missing.");
+            }
+        }
+        else if (op == "sub") {
+            if (p1_c) {
+                String  subOp = String(p1_c);
+                subOp.toLowerCase();
+                if (subOp == "stop") {
+                    if (mqttTopic.length()) {
+                        Serial.println("unsubscribe:" + mqttTopic);
+                        if (mqttClient.unsubscribe(mqttTopic.c_str())) {
+                            Serial.println("OK");
+                            mqttTopic = String();
+                        }
+                        else
+                            Serial.println("fail");
+                    }
+                }
+                else {
+                    uint8_t QoS = 0;
+                    String  topic = String(p1_c);
+                    const char* QoS_c = Cmd.next();
+                    if (QoS_c) {
+                        if (*QoS_c == '1' || *QoS_c == '0') {
+                            QoS = *QoS_c - '0';
+                        }
+                    }
+
+                    Serial.println("toptic:" + topic + " QoS:" + String(QoS));
+                    if (wifiClient != nullptr || wifiClientSec != nullptr) {
+                        if (!mqttClient.connected()) {
+                            Serial.print("MQTT reconnect:" + mqttServer);
+                            _mqttConnect();
+                        }
+                        if (mqttClient.connected()) {
+                            if (mqttClient.subscribe(p1_c, QoS)) {
+                                Serial.println("OK");
+                                mqttTopic = topic;
+                            }
+                            else
+                                Serial.println("fail");
+                        }
+                        else {
+                            Serial.println("reconnect failed");
+                        }
+                    }
+                }
+            }
+        }
+        else if (op == "pub") {
+            if (p1_c && (wifiClient != nullptr || wifiClientSec != nullptr)) {
+                bool    ret = false;
+                const char* payload_c = Cmd.next();
+                if (payload_c) {
+                    const char* retain_c = Cmd.next();
+                    if (retain_c) {
+                        String  retain = String(retain_c);
+                        retain.toLowerCase();
+                        if (retain == "#r")
+                            ret = true;
+                    }
+                    Serial.println("topic:" + String(p1_c) + ", payload:" + String(payload_c));
+                    if (mqttClient.publish(p1_c, payload_c, ret))
+                        Serial.println("OK");
+                    else
+                        Serial.println("fail");
+                }
+            }
+        }
+    }
+    Serial.print("> ");
+}
+
+bool _mqttConnect() {
+    unsigned long   to = millis();
+    PilotLED.Start(200, 100);
+    while (!mqttClient.connect(mqttClientID.c_str(), mqttAuth.c_str(), mqttPassword.c_str())) {
+        if (millis() - to > 60000) {
+            break;
+        }
+        Serial.print('.');
+        delay(500);
+    }
+    Serial.println();
+    PilotLED.Start(800, 600);
+    return mqttClient.connected();
+}
+
+bool _mqttIncomming() {
+    if (!mqttClient.connected()) {
+        Serial.print("[info] mqtt server disconnected, reconnect ");
+        if (_mqttConnect())
+            Serial.println("OK");
+        else
+            Serial.println("failed.");
+    }
+    return mqttClient.loop();
+}
+
+void _mqttSubscribe(char* topic, byte* payload, unsigned int length) {
+    Serial.println("[info] mqtt topic:" + String(topic));
+    Serial.println("[info] mqtt payload(" + String(length) + "):");
+    uint16_t cl = 0;
+    while (length > 0) {
+        uint16_t c = cl;
+        uint16_t xc = cl;
+        Serial.printf("%03x ", cl);
+        while (c < (length > 16 ? 16 : length)) {
+            Serial.printf(" %02x", payload[c++]);
+            cl++;
+        }
+        Serial.print("  ");
+        for (uint16_t ix = xc; ix < xc + c; ix++) {
+            char dc = payload[ix];
+            if (iscntrl((int)dc))
+                dc = '.';
+            Serial.print(dc);
+        }
+        length -= c;
+        Serial.println();
+    }
+}
+
 void reset() {
     Serial.println("ESP.reset");
     ESP.reset();
@@ -491,6 +874,7 @@ void showConfig() {
     Serial.println(WiFi.subnetMask());
     Serial.println("WiFi.SSID:" + WiFi.SSID());
     Serial.println("WiFi.PSK:" + WiFi.psk());
+    Serial.println("WiFi.RSSI:" + String(WiFi.RSSI()));
     Serial.print("WiFi.sleepMode:");
     switch (WiFi.getSleepMode()) {
     case WIFI_NONE_SLEEP:
@@ -504,7 +888,10 @@ void showConfig() {
         break;
     }
     Serial.println("SDK version:" + String(ESP.getSdkVersion()));
+    Serial.println("Core version:" + ESP.getCoreVersion());
+    Serial.println("Chip ID:" + String(ESP.getChipId()));
     Serial.println("CPU Freq.:" + String(ESP.getCpuFreqMHz()) + "MHz");
+    Serial.println("Flash chip ID:" + String(ESP.getFlashChipId()));
     Serial.println("Flash size:" + String(ESP.getFlashChipRealSize()));
     Serial.println("Flash Freq.:" + String(ESP.getFlashChipSpeed()/1000000) + "MHz");
     Serial.print("Flash mode:");
@@ -524,6 +911,9 @@ void showConfig() {
     default:
         Serial.println();
     }
+    Serial.println("SPIFFS size:" + String((uint32_t)&_SPIFFS_end - (uint32_t)&_SPIFFS_start));
+    Serial.println("EEPROM offset:" + String((uint32_t)&_SPIFFS_end - 0x40200000, HEX));
+    Serial.println("Free heap:" + String(ESP.getFreeHeap()));
     Serial.print("> ");
 }
 
@@ -873,19 +1263,19 @@ void http() {
         Serial.print("GET ");
         Serial.println(url);
         PilotLED.Start(200, 100);
-        if (client.begin(url)) {
-            client.collectHeaders(httpHeaders, sizeof(httpHeaders) / sizeof(const char*));
-            int code = client.GET();
+        if (httpClient.begin(url)) {
+            httpClient.collectHeaders(httpHeaders, sizeof(httpHeaders) / sizeof(const char*));
+            int code = httpClient.GET();
             Serial.println(String(code) + ':');
-            for (uint8_t i = 0; i < (uint8_t)client.headers(); i++) {
-                if (client.hasHeader(client.headerName(i).c_str()))
-                    Serial.println(client.headerName(i) + ':' + client.header(i));
+            for (uint8_t i = 0; i < (uint8_t)httpClient.headers(); i++) {
+                if (httpClient.hasHeader(httpClient.headerName(i).c_str()))
+                    Serial.println(httpClient.headerName(i) + ':' + httpClient.header(i));
             }
             if (code == HTTP_CODE_OK) {
                 uint8_t	buff[128] = { 0 };
-                WiFiClient* contentStream = client.getStreamPtr();
-                int contentLength = client.getSize();
-                while (client.connected() && (contentLength > 0 || contentLength == -1)) {
+                WiFiClient* contentStream = httpClient.getStreamPtr();
+                int contentLength = httpClient.getSize();
+                while (httpClient.connected() && (contentLength > 0 || contentLength == -1)) {
                     size_t	availSize = contentStream->available();
                     if (availSize) {
                         int	blkSize = contentStream->readBytes(buff, ((availSize > sizeof(buff)) ? sizeof(buff) : availSize));
@@ -896,7 +1286,7 @@ void http() {
                     delay(1);
                 }
             }
-            client.end();
+            httpClient.end();
         }
         else { Serial.print("Fail"); }
         PilotLED.Start(800, 600);
@@ -984,12 +1374,14 @@ static const commandS	commands[] = {
     { "begin", "[SSID [PASSPHRASE]] [#wait]", beginWiFi },
     { "delay", "MILLISECONDS", doDelay },
     { "discon", "[ap]", disconnWiFi },
+    { "eeprom", "{addr [ADDRESS]}|{clear BYTE LENGTH}|{write DATA}|{read LENGTH}", eeprom},
     { "event", "on|off", doEvent },
     { "fs", "start|dir|{file PATH}|format|info|{remove PATH}|{rename PATH NEW_PATH}", fileSystem },
     { "gpio", "{get PORT_NUM}|{set PORT_NUM high|low}", gpio },
     { "heap", "", freeHeap },
     { "http", "{get url}|{on uri PAGE_CONTENT}", http },
     { "mode", "ap|sta|apsta|off", setWiFiMode },
+    { "mqtt", "{server SERVER [PORT]}|{con CLIENT_ID AUTH PASS}|{pub {TOPIC PAYLOAD [#r]|stop}}|{sub TOPIC [QoS]}|close", mqtt },
     { "persistent", "on|off", setPersistent },
     { "reset", "", reset },
     { "scan", "", scan },
@@ -1026,11 +1418,18 @@ void setup() {
     Cmd.addCommand("help", help);
     Cmd.addCommand("?", help);
     Cmd.setDefaultHandler(unrecognized);
-    Serial.printf("ESPShaker %s - %08x,Flash:%u,SDK%s\r\n", _VERSION, ESP.getChipId(), ESP.getFlashChipRealSize(), system_get_sdk_version());
+    String coreVersion = ESP.getCoreVersion();
+    coreVersion.replace('_', '.');
+    Serial.printf("ESPShaker %s - %08x,Flash:%u,SDK%s,core%s\r\n", _VERSION, ESP.getChipId(), ESP.getFlashChipRealSize(), system_get_sdk_version(), coreVersion.c_str());
     Serial.println("Type \"help\", \"?\" for commands list.");
 
     showWiFiMode();
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     WiFi.onEvent(wifiEvent, WIFI_EVENT_ANY);
+#pragma GCC diagnostic pop
+
+    mqttTopic = String();
 }
 
 void loop() {
@@ -1065,4 +1464,7 @@ void loop() {
         DnsServer.processNextRequest();
     if (WebServer != nullptr)
         WebServer->handleClient();
+
+    if (mqttTopic.length())
+        _mqttIncomming();
 }

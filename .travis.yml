@@ -20,5 +20,8 @@ install:
     - wget https://github.com/Hieromon/PseudoPWM/archive/master.zip -O /tmp/PseudoPWM_source.zip
     - unzip /tmp/PseudoPWM_source.zip -d /tmp
 
+    - wget https://github.com/knolleary/pubsubclient/archive/master.zip -O /tmp/pubsubclient_source.zip
+    - unzip /tmp/pubsubclient.zip -d /tmp
+
 script:
     - platformio ci --lib="." --lib="/tmp/PageBuilder-master" --lib="/tmp/PseudoPWM-master" --board=nodemcuv2

@@ -24,4 +24,4 @@ install:
     - unzip /tmp/pubsubclient_source.zip -d /tmp
 
 script:
-    - platformio ci --lib="." --lib="/tmp/PageBuilder-master" --lib="/tmp/PseudoPWM-master" --board=nodemcuv2
+    - platformio ci --lib="." --lib="/tmp/PageBuilder-master" --lib="/tmp/PseudoPWM-master" --lib="/tmp/pubsubclient-master" --board=nodemcuv2

@@ -21,7 +21,7 @@ install:
     - unzip /tmp/PseudoPWM_source.zip -d /tmp
 
     - wget https://github.com/knolleary/pubsubclient/archive/master.zip -O /tmp/pubsubclient_source.zip
-    - unzip /tmp/pubsubclient.zip -d /tmp
+    - unzip /tmp/pubsubclient_source.zip -d /tmp
 
 script:
     - platformio ci --lib="." --lib="/tmp/PageBuilder-master" --lib="/tmp/PseudoPWM-master" --board=nodemcuv2

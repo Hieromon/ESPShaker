@@ -142,14 +142,15 @@ void autoConnect() {
 
 void beginWiFi() {
     bool    beginWait = false;
-    char*	c_ssid;
+    char*   c_ssid;
     char*   c_pass;
     char*   c_op = Cmd.next();
     String  op = String(c_op);
 
     Serial.print("WiFi.begin(");
-    if (op == "#wait") {
-        beginWait = true;
+    if (op.length() == 0 || op == "#wait") {
+        if (op == "#wait")
+            beginWait = true;
         WiFiStatus = WiFi.begin();
     }
     else {
@@ -171,13 +172,24 @@ void beginWiFi() {
     }
     Serial.print(") ");
     if (beginWait) {
-        Serial.println("wait");
+        Serial.print("wait");
     } else
         Serial.println("nowait");
     PilotLED.Start(200, 100);
     if (beginWait) {
-        WiFi.waitForConnectResult();
+        unsigned long st = millis();
+        while (WiFi.status() != WL_CONNECTED) {
+            if (millis() - st > 30000) {
+                Serial.print("time out");
+                PilotLED.Start(800, 600);
+                break;
+            }
+            delay(300);
+            Serial.print('.');
+        }
+        Serial.println();
     }
+    Serial.print("> ");
 }
 
 void beginWPS() {

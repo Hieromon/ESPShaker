@@ -4,8 +4,8 @@
  *	they can be executed with interactive commands.
  *	@file	ESPShaker.ino
  *	@author	hieromon@gmail.com
- *	@version	1.1
- *	@date	2018-01-31
+ *	@version	1.2
+ *	@date	2018-02-17
  *	@copyright	MIT license.
  */
 
@@ -29,7 +29,7 @@ extern "C" {
 extern "C" uint32_t _SPIFFS_start;
 extern "C" uint32_t _SPIFFS_end;
 
-#define _VERSION    "1.1"
+#define _VERSION    "1.2"
 
 class httpHandler : public RequestHandler {
 public:
@@ -550,6 +550,20 @@ void gpio() {
     Serial.print("> ");
 }
 
+void hostname() {
+    String  op = String(Cmd.next());
+    Serial.print("WiFi.hostname");
+    if (op.length() > 0) {
+        WiFi.hostname(op);
+        Serial.println("(" + op + ")");
+        Serial.println("OK");
+    }
+    else {
+        Serial.println(":" + WiFi.hostname());
+    }
+    Serial.print("> ");
+}
+
 void mqtt() {
     String  op = String(Cmd.next());
     op.toLowerCase();
@@ -885,6 +899,7 @@ void showConfig() {
     Serial.print("WiFi.subnetMask:");
     Serial.println(WiFi.subnetMask());
     Serial.println("WiFi.SSID:" + WiFi.SSID());
+    Serial.println("WiFi.BSSID:" + WiFi.BSSIDstr());
     Serial.println("WiFi.PSK:" + WiFi.psk());
     Serial.println("WiFi.RSSI:" + String(WiFi.RSSI()));
     Serial.print("WiFi.sleepMode:");
@@ -1391,6 +1406,7 @@ static const commandS	commands[] = {
     { "fs", "start|dir|{file PATH}|format|info|{remove PATH}|{rename PATH NEW_PATH}", fileSystem },
     { "gpio", "{get PORT_NUM}|{set PORT_NUM high|low}", gpio },
     { "heap", "", freeHeap },
+    { "hostname", "[HOSTNAME]", hostname },
     { "http", "{get url}|{on uri PAGE_CONTENT}", http },
     { "mode", "ap|sta|apsta|off", setWiFiMode },
     { "mqtt", "{server SERVER [PORT]}|{con CLIENT_ID AUTH PASS}|{pub {TOPIC PAYLOAD [#r]|stop}}|{sub TOPIC [QoS]}|close", mqtt },

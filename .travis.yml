@@ -23,5 +23,8 @@ install:
     - wget https://github.com/knolleary/pubsubclient/archive/master.zip -O /tmp/pubsubclient_source.zip
     - unzip /tmp/pubsubclient_source.zip -d /tmp
 
+    - wget https://github.com/dancol90/ESP8266Ping/archive/master.zip -O /tmp/ESP8266Ping_source.zip
+    - unzip /tmp/ESP8266Ping_source.zip -d /tmp
+
 script:
-    - platformio ci --lib="." --lib="/tmp/PageBuilder-master" --lib="/tmp/PseudoPWM-master" --lib="/tmp/pubsubclient-master" --board=nodemcuv2
+    - platformio ci --lib="." --lib="/tmp/PageBuilder-master" --lib="/tmp/PseudoPWM-master" --lib="/tmp/pubsubclient-master" --lib="/tmp/ESP8266Ping-master" --board=nodemcuv2

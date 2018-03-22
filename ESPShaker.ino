@@ -17,6 +17,7 @@
 #include <DNSServer.h>
 #include <ESP8266mDNS.h>
 #include <ESP8266HTTPClient.h>
+#include <ESP8266Ping.h>
 #include <EEPROM.h>
 #include <FS.h>
 #include <PubSubClient.h>
@@ -29,7 +30,7 @@ extern "C" {
 extern "C" uint32_t _SPIFFS_start;
 extern "C" uint32_t _SPIFFS_end;
 
-#define _VERSION    "1.2"
+#define _VERSION    "1.3"
 
 class httpHandler : public RequestHandler {
 public:
@@ -763,6 +764,27 @@ void _mqttSubscribe(char* topic, byte* payload, unsigned int length) {
     }
 }
 
+void ping() {
+    IPAddress rmIP;
+    String remoteHost = String(Cmd.next());
+    if (remoteHost.length() > 0) {
+        bool rc;
+        Serial.print("ping ");
+        Serial.print(remoteHost);
+        if (rmIP.fromString(remoteHost))
+            rc = Ping.ping(rmIP);
+        else
+            rc = Ping.ping(remoteHost.c_str());
+        if (rc) {
+            Serial.println(" Avg[ms]:" + String(Ping.averageTime()));
+            Serial.println("OK");
+        }
+        else
+            Serial.println(" Fail");
+    }
+    Serial.print("> ");
+}
+
 void reset() {
     Serial.println("ESP.reset");
     ESP.reset();
@@ -1359,6 +1381,40 @@ void http() {
     Serial.print("> ");
 }
 
+void wifiConfig() {
+    IPAddress stationIP(0U);
+    IPAddress stationGW(0U);
+    IPAddress stationNM(255, 255, 255, 0);
+    IPAddress stationDNS1(0U);
+    IPAddress stationDNS2(0U);
+    String  s_stationIP = String(Cmd.next());
+    String  s_stationGW = String(Cmd.next());
+    String  s_stationNM = String(Cmd.next());
+    String  s_stationDNS1 = String(Cmd.next());
+    String  s_stationDNS2 = String(Cmd.next());
+    if (s_stationIP.length() > 0 && s_stationGW.length()) {
+        stationIP.fromString(s_stationIP);
+        stationGW.fromString(s_stationGW);
+        if (s_stationNM.length() > 0)
+            stationNM.fromString(s_stationNM);
+        if (s_stationDNS1.length() > 0)
+            stationDNS1.fromString(s_stationDNS1);
+        else
+            stationDNS1 = stationGW;
+        if (s_stationDNS2.length() > 0)
+            stationDNS2.fromString(s_stationDNS2);
+        Serial.print("WiFi.config(IP=");
+        Serial.print(stationIP.toString() + ",GW=");
+        Serial.print(stationGW.toString() + ",NM=");
+        Serial.print(stationNM.toString() + ",DNS1=,");
+        Serial.print(stationDNS1.toString() + ",DNS2=");
+        Serial.print(stationDNS2.toString());
+        Serial.println(")");
+        Serial.println(WiFi.config(stationIP, stationGW, stationNM, stationDNS1, stationDNS2) ? "OK" : "Fail");
+    }
+    Serial.print("> ");
+}
+
 typedef struct _eventType {
     const WiFiEvent_t event;
     const char* desc;
@@ -1399,9 +1455,10 @@ static const commandS	commands[] = {
     { "apconfig", "[AP_IP] [GW_IP] [NETMASK]", softAPConfig },
     { "autoconnect", "on|off", autoConnect },
     { "begin", "[SSID [PASSPHRASE]] [#wait]", beginWiFi },
+    { "config", "IP GW [NETMASK] [DNS1] [DNS2]", wifiConfig },
     { "delay", "MILLISECONDS", doDelay },
     { "discon", "[ap]", disconnWiFi },
-    { "eeprom", "{addr [ADDRESS]}|{clear BYTE LENGTH}|{write DATA}|{read LENGTH}", eeprom},
+    { "eeprom", "{addr [ADDRESS]}|{clear BYTE LENGTH}|{write DATA}|{read LENGTH}", eeprom },
     { "event", "on|off", doEvent },
     { "fs", "start|dir|{file PATH}|format|info|{remove PATH}|{rename PATH NEW_PATH}", fileSystem },
     { "gpio", "{get PORT_NUM}|{set PORT_NUM high|low}", gpio },
@@ -1411,6 +1468,7 @@ static const commandS	commands[] = {
     { "mode", "ap|sta|apsta|off", setWiFiMode },
     { "mqtt", "{server SERVER [PORT]}|{con CLIENT_ID AUTH PASS}|{pub {TOPIC PAYLOAD [#r]|stop}}|{sub TOPIC [QoS]}|close", mqtt },
     { "persistent", "on|off", setPersistent },
+    { "ping", "REMOTE_HOST", ping },
     { "reset", "", reset },
     { "scan", "", scan },
     { "sleep", "none|light|modem|{deep SLEEP_TIME}", setSleep },

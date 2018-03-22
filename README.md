@@ -27,7 +27,13 @@ Required [Arduino IDE](http://www.arduino.cc/en/main/software) is current upstre
 
 ### Installation
 
-Download ESPShaker file as a zip from this repository, and extract the resulting folder into your Arduino sketch folder and build it with Arduino IDE. In addition to this file, two external libraries are required as [PseudoPWM](https://github.com/Hieromon/PseudoPWM) for LED blinking and [PageBuilder](https://github.com/Hieromon/PageBuilder) for html page dynamic creation. Also [PubSubClient library](https://github.com/knolleary/pubsubclient/releases/latest) is required for subscribing and publishing messages according to the MQTT protocol.  
+Download ESPShaker file as a zip from this repository, and extract the resulting folder into your Arduino sketch folder and build it with Arduino IDE. In addition to this file, following external libraries are required.
+
+- [ESP8266Ping](https://github.com/dancol90/ESP8266Ping): For the **ping** command.
+- [PageBuilder](https://github.com/Hieromon/PageBuilder): For html page dynamic creation.
+- [PseudoPWM](https://github.com/Hieromon/PseudoPWM): For LED blinking.
+- [PubSubClient](https://github.com/knolleary/pubsubclient/releases/latest): For subscribing and publishing messages according to the MQTT protocol.
+
 Then open the serial monitor and reset the ESP8266 module. If ESPShaker is working properly the current WiFi status will be displayed on the serial monitor. The serial monitor's baudrate is 115200 bps.
 
 ### Usage
@@ -87,6 +93,7 @@ Enter `command` and `operand` separated by blanks. Depending on the command, it 
 | apconfig | Set IP addresses of AP mode | WiFi.softAPConfig |
 | autoconnect | Set auto connect validity | WiFi.setAutoConnect |
 | begin | Begin WiFi communication | WiFi.begin |
+| config | Change IP configuration settings disabling the dhcp client | WiFi.config |
 | delay | Delay milliseconds | delay |
 | discon | Disconnect WiFi | WiFi.disconnect |
 | eeprom | read and write eeprom data | EEPROM.read, EEPROM.write |
@@ -97,6 +104,7 @@ Enter `command` and `operand` separated by blanks. Depending on the command, it 
 | hostname | Sets or Gets host name | WiFi.hostname |
 | mode | Set Wi-Fi working mode | WiFi.mode |
 | mqtt | MQTT message publish/subscribe | Depends on PubSubClient library |
+| ping | Let ICMP Ping a remote host. | ESP8266Ping |
 | persistent | Set whether to store WiFi working mode in flash memory | WiFi.persistent |
 | reset | Reset esp8266 module | ESP.reset |
 | scan | Scan all available APs | WiFi.scanNetworks |
@@ -143,7 +151,21 @@ Enter `help` or `?` will display commands list.
    If `SSID` or `PASSPHRASE` omitted, the previous value in the flash will be used.  
    For `#wait` option is specified, it waits for the next command processing until WiFi connection status transition. This option is useful when storing a series of commands in a file and executing as batch process. For batch processing, refer to [Batch process](#Batch-process).
 
-4. **delay**  
+4. **confg**  
+   Change IP configuration settings disabling the dhcp client with STA mode.
+   ```
+   config IP GW [NETMASK] [DNS1] [DNS2]
+   ```
+   The **config** command assigns a static IP address to ESP8266 with STA mode. This command is invalid in AP mode.  
+   DHCP is enabled while this command not used and an IP address will be assigned by DHCP server with WiFi.begin.
+
+   `IP` : An IP address to be assigned to ESP8266.  
+   `GW` : Gateway address.  
+   `NETMASK` : Sub netmask. The default value is 255.255.255.0.  
+   `DNS1` : A primary DNS address. If this parameter missed the gateway address will be assumed.  
+   `DNS2` : A secondary DNS address. The default value is 0.0.0.0.  
+
+5. **delay**  
    Pauses the program for the amount of time in milliseconds.
    ```
    delay MILLISECONDS
@@ -151,14 +173,14 @@ Enter `help` or `?` will display commands list.
    `MILLISECONDS` : The amount time to delay in milliseconds uint.  
    **'delay'** command is almost for batch processing.
 
-5. **discon**  
+6. **discon**  
    Disconnects Wi-Fi.
    ```
    discon [ap]
    ```
    `ap` : Disconnect station from ESP8266 in SoftAP mode by **WiFi.softAPdisconnect**. If this operand is not specified, it disconnects ESP8266 from the access point by **WiFi.disconnect**.
 
-6. **eeprom**  
+7. **eeprom**  
    Read and  write to EEPROM.
    ```
    eeprom addr [ADDRESS]
@@ -173,7 +195,7 @@ Enter `help` or `?` will display commands list.
 
    The each parameter as **ADDRESS**, **LENGTH**, **BYTE** and **DATA** are hexadecimal. **BYTE** is 2-digits hexadecimal is actually. **DATA** can be specified with continuous long hexadecimal digit like as `68656c6c6f2c20776f726c64`. The **clear**, **write** and **read** commands automatically increment the current EEPROM address. **ADDRESS** ranges from 0 to FFF are valid and if the address reached at end of EEPROM, it rounds to 0.  
 
-7. **event**  
+8. **event**  
    Detects events with **WiFi.onEvent** method and displays events.
    ```
    event on | off
@@ -189,7 +211,7 @@ Enter `help` or `?` will display commands list.
    > ... WiFi client was connected.  
    > [event]:5 (WIFI_EVENT_SOFTAPMODE_STACONNECTED)  
 
-8. **fs**  
+9. **fs**  
    Handles SPIFFS file system.
    ```
    fs start
@@ -208,7 +230,7 @@ Enter `help` or `?` will display commands list.
    + `fs remove PATH` : Remove file specified `PATH`.  
    + `fs rename PATH NEW_PATH` :  Rename file specified `PATH` to `NEW_PATH`.
    
-9. **gpio**  
+10. **gpio**  
    Gets or sets GPIO port value. 
    ```
    gpio get PORT_NUM
@@ -221,7 +243,7 @@ Enter `help` or `?` will display commands list.
    + `get PORT_NUM` : Reads the status of GPIO specified `PORT_NUM`. The port value is read digitally and is either `LOW` or `HIGH`. At that time the **pinMode** is not changed.  
    + `set PORT_NUM low | high` : Sets the specified `PORT_NUM` to `low` or `high`.
 
-10. **hostname**  
+11. **hostname**  
    Sets or Gets host name.
    ```
    hostname [HOSTNAME]
@@ -229,7 +251,7 @@ Enter `help` or `?` will display commands list.
    A **hostname** command gets the DHCP hostname assigned to ESP station or sets to hostname with specified HOSTNAME parameter.  
    `HOSTNAME` : A host name of station to be set. This parameter missing, show the current hostname.
 
-11. **http**  
+12. **http**  
    Issues the GET method to specified Web site or define web page as plain texts.
    ```
    http get URL
@@ -248,7 +270,7 @@ Enter `help` or `?` will display commands list.
      <br>In the above, switch to SoftAP mode and register **/hello** page contents with **'http on'** command. Then start and access the embedded Web server with **'start web'** command. A response from /hello looks like as below. If not registered page is accessed a response of 404 will appear.  
      <br>![r_sc_helloworld](https://user-images.githubusercontent.com/12591771/34244216-a2fa4cde-e667-11e7-94b4-48ec62f3212c.png) &nbsp;&nbsp; ![r_sc_404](https://user-images.githubusercontent.com/12591771/34244243-b5f98cd2-e667-11e7-9655-524afbf4085e.png)  
 
-12. **mode**  
+13. **mode**  
    Set Wi-Fi working mode to Station mode (**WIFI_STA**), SoftAP (**WIFI_AP**) or Station + SoftAP (**WIFI_APSTA**), and save it in flash. Immediately after resetting, the default mode is SoftAP mode.
    ```
    mode ap | sta | apsta | off
@@ -258,7 +280,7 @@ Enter `help` or `?` will display commands list.
    `apsta` : Set WIFI_APSTA mode.  
    `off` : Shutdown Wi-Fi working.  
 
-13. **mqtt**  
+14. **mqtt**  
     Publish/subscribe messages between ESP8266 and a server using the MQTT protocol. The actual execution of this command is based on the PubSubClient library. The **mqtt** command does **not** definitely the native support for MQTT over **Websockets**.
     ```
     mqtt server SERVER [PORT]
@@ -296,7 +318,16 @@ Enter `help` or `?` will display commands list.
 
     This procedure publish an **evt** event as **{"d":{"GPIO2":false}}** while subscribing to **cmd** topic. When **cmd** as ** {"RST":"０"}** coded by UTF-8 is published to the server, its payload is displayed automatically.
 
-14. **persistent**  
+15. **ping**  
+    Send ICMP ECHO_REQUEST packets to network hosts.
+    ```
+    ping REMOTE_HOST
+    ```
+     `REMOTE_HOST` : A remote host that should be let a pinged. It is IP address or domain can be specified.
+
+     ICMP packet sends 5 times. If Ping succeeds, its average response time is displayed.
+
+16. **persistent**  
     Set whether to store WiFi working mode in flash memory.
     ```
     persistent on | off
@@ -305,20 +336,20 @@ Enter `help` or `?` will display commands list.
     `off` : WiFi current working mode is not stored. It would be restored previously after reset.  
     The working mode at the time when **persistent** is `on` is not memorized. It would be memorized from **after setting** `on`.
 
-15. **reset**  
+17. **reset**  
     Reset the module.
     ```
     reset
     ```
     This command invokes `ESP.reset()` function.
 
-16. **scan**  
+18. **scan**  
    Scan all available APs.
    ```
    scan
    ```
 
-17. **show**  
+19. **show**  
    Display current module saved values as follows.  
    ```
    show
@@ -339,7 +370,7 @@ Enter `help` or `?` will display commands list.
    + Chip configuration.
    + Free heap size.  
 
-18. **sleep**  
+20. **sleep**  
     Set sleep mode or embarks a deep sleep.
     ```
     sleep none | light | modem
@@ -353,7 +384,7 @@ Enter `help` or `?` will display commands list.
      Upon waking up, ESP8266 boots up from setup(), but *GPIO16* and *RST* must be connected. For reference, *GPIO16* is assigned to *D0* on **ESP-12** (NodeMCU) and is **not connected** to external pin with **ESP-01**.
       - `SLEEP_TIME` : Time from deep sleep to waking up (in microseconds unit).  
 
-19. **smartconfig**  
+21. **smartconfig**  
    Start or stop Smart Config by ESP-TOUCH.<img  align="right" alt="esp-touch" src="https://user-images.githubusercontent.com/12591771/33641022-18f32c64-da77-11e7-8492-5460b78d4466.png">
    ```
    smartconfig start | stop | done
@@ -364,7 +395,7 @@ Enter `help` or `?` will display commands list.
    - `stop` : Stop Smart Config.
    - `done` : Inquiry a status of Smart Config.
 
-20. **softap**  
+22. **softap**  
    Start SoftAP operation.
    ```
    softap SSID PASSPHRASE
@@ -372,7 +403,7 @@ Enter `help` or `?` will display commands list.
    `SSID` : Specify SSID for SoftAP.  
    `PASSPHRASE` : Specify Passphrase for the SSID.
 
-21. **start**  
+23. **start**  
     Start Web server, DNS server, mDNS service.
     ```
     start web
@@ -389,20 +420,20 @@ Enter `help` or `?` will display commands list.
        - `PROTOCOL` : Specifies the protocol like `tcp`.  
        - `PORT` : Specifies the port of the service. When service is http, The port operand could be omitted and assumed **#80**.  
 
-22. **station**  
+24. **station**  
     Display number of connected stations for SoftAP.
     ```
     station
     ```
 
-23. **status**  
+25. **status**  
     Display current Wi-Fi status.
     ```
     status
     ```
     Display Wi-Fi connection status via WiFi.status() function. The return value described wl_status_t enum.
 
-24. **stop**  
+26. **stop**  
     Stop ESPShaker's internal server.
     ```
     stop web | dns
@@ -410,7 +441,7 @@ Enter `help` or `?` will display commands list.
     `web` : Stop Web server.  
     `dns` : Stop DNS server.
 
-25. **wps**  
+27. **wps**  
     Begin WPS configuration.
     ```
     wps
@@ -430,6 +461,10 @@ Executed as follows.
 ESP8266 UART RX buffer size is 128 bytes also ESPShaker has 128 bytes command buffer. The USB Serial bridge interface fetches the contents of the received packet to the hardware buffer all at once. But ESP8266 SDK does not support hardware flow control and RX interrupt can not be properly controlled from the sketch. So at this way, a whole sending data may not be received.
 
 ### Change log
+
+#### [1.3] 2018-03-22
+- Supports **config** command.
+- Supports **ping** command.
 
 #### [1.2] 2018-02-17
 - Supports **hostname** command.

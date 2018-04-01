@@ -9,7 +9,7 @@ cache:
         - "~/.platformio"
 
 env:
-    - PLATFORMIO_CI_SRC=./ESPShaker.ino
+    - PLATFORMIO_CI_SRC=./ESPShaker
 
 install:
     - pip install -U platformio

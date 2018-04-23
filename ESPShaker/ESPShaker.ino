@@ -4,8 +4,8 @@
  *	they can be executed with interactive commands.
  *	@file	ESPShaker.ino
  *	@author	hieromon@gmail.com
- *	@version	1.2
- *	@date	2018-02-17
+ *	@version	1.3.1
+ *	@date	2018-04-23
  *	@copyright	MIT license.
  */
 
@@ -30,7 +30,7 @@ extern "C" {
 extern "C" uint32_t _SPIFFS_start;
 extern "C" uint32_t _SPIFFS_end;
 
-#define _VERSION    "1.3"
+#define _VERSION    "1.3.1"
 
 class httpHandler : public RequestHandler {
 public:
@@ -1070,7 +1070,7 @@ void softAP() {
                 yield();
                 delay(100);
             }
-#ifdef ARDUINO_ESP8266_RELEASE_2_4_0
+#ifdef defined(ARDUINO_ESP8266_RELEASE_2_4_0) || defined(ARDUINO_ESP8266_RELEASE_2_4_1)
             // This callback is available only esp8266 core 2.4.0
             WiFi.onSoftAPModeStationConnected([](const WiFiEventSoftAPModeStationConnected& e) {
                 Serial.println();

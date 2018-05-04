@@ -4,8 +4,8 @@
  *	they can be executed with interactive commands.
  *	@file	ESPShaker.ino
  *	@author	hieromon@gmail.com
- *	@version	1.3.1
- *	@date	2018-04-23
+ *	@version	1.3.2
+ *	@date	2018-05-05
  *	@copyright	MIT license.
  */
 
@@ -30,7 +30,7 @@ extern "C" {
 extern "C" uint32_t _SPIFFS_start;
 extern "C" uint32_t _SPIFFS_end;
 
-#define _VERSION    "1.3.1"
+#define _VERSION    "1.3.2"
 
 class httpHandler : public RequestHandler {
 public:
@@ -114,6 +114,7 @@ String  mqttPassword;
 int     mqttState;
 String  mqttTopic;
 
+String coreVersion;
 
 bool isNumber(String str) {
     uint8_t varLength = (uint8_t)str.length();
@@ -1466,7 +1467,7 @@ static const commandS	commands[] = {
     { "hostname", "[HOSTNAME]", hostname },
     { "http", "{get url}|{on uri PAGE_CONTENT}", http },
     { "mode", "ap|sta|apsta|off", setWiFiMode },
-    { "mqtt", "{server SERVER [PORT]}|{con CLIENT_ID AUTH PASS}|{pub {TOPIC PAYLOAD [#r]|stop}}|{sub TOPIC [QoS]}|close", mqtt },
+    { "mqtt", "{server SERVER [PORT]}|{con CLIENT_ID AUTH PASS}|{pub {TOPIC PAYLOAD [#r]}}|{sub TOPIC [QoS]|stop}|close", mqtt },
     { "persistent", "on|off", setPersistent },
     { "ping", "REMOTE_HOST", ping },
     { "reset", "", reset },
@@ -1487,7 +1488,12 @@ void unrecognized(const char* cmd) {
     Serial.print("> ");
 }
 
+void echoVersion() {
+    Serial.printf("ESPShaker %s - %08x,Flash:%u,SDK%s,core%s\r\n", _VERSION, ESP.getChipId(), ESP.getFlashChipRealSize(), system_get_sdk_version(), coreVersion.c_str());
+}
+
 void help() {
+    echoVersion();
     Serial.println("Commands:");
     for (uint8_t i = 0; i < sizeof(commands) / sizeof(struct _command); i++)
         Serial.println(String(commands[i].name) + ' ' + String(commands[i].option));
@@ -1504,9 +1510,9 @@ void setup() {
     Cmd.addCommand("help", help);
     Cmd.addCommand("?", help);
     Cmd.setDefaultHandler(unrecognized);
-    String coreVersion = ESP.getCoreVersion();
+    coreVersion = ESP.getCoreVersion();
     coreVersion.replace('_', '.');
-    Serial.printf("ESPShaker %s - %08x,Flash:%u,SDK%s,core%s\r\n", _VERSION, ESP.getChipId(), ESP.getFlashChipRealSize(), system_get_sdk_version(), coreVersion.c_str());
+    echoVersion();
     Serial.println("Type \"help\", \"?\" for commands list.");
 
     showWiFiMode();

@@ -4,8 +4,8 @@
  *	they can be executed with interactive commands.
  *	@file	ESPShaker.ino
  *	@author	hieromon@gmail.com
- *	@version	1.3.2
- *	@date	2018-05-05
+ *	@version	1.3.3
+ *	@date	2018-11-28
  *	@copyright	MIT license.
  */
 
@@ -30,7 +30,7 @@ extern "C" {
 extern "C" uint32_t _SPIFFS_start;
 extern "C" uint32_t _SPIFFS_end;
 
-#define _VERSION    "1.3.2"
+#define _VERSION    "1.3.3"
 
 class httpHandler : public RequestHandler {
 public:
@@ -196,7 +196,15 @@ void beginWiFi() {
 
 void beginWPS() {
     Serial.println("WiFi.beginWPSConfig");
+#if defined(ARDUINO_ESP8266_RELEASE_2_4_2)
+#ifndef NO_EXTRA_4K_HEAP
+    Serial.println("It needs core of NO_EXTRA_4K_HEAP configuration.");
+#else
     Serial.println(WiFi.beginWPSConfig() ? "OK" : "Fail");
+#endif
+#else
+    Serial.println(WiFi.beginWPSConfig() ? "OK" : "Fail");
+#endif
     Serial.print("> ");
 }
 
@@ -475,7 +483,7 @@ void fileSystem() {
                                         size_t  availSize = f.available();
                                         if (availSize) {
                                             int blkSize = f.readBytes(buff, ((availSize > sizeof(buff)) ? sizeof(buff) : availSize));
-                                            Serial.write(buff, blkSize);
+                                            Serial.write((const uint8_t*)buff, blkSize);
                                             if (fileSize > 0)
                                                 fileSize -= blkSize;
                                         }
@@ -564,6 +572,56 @@ void hostname() {
         Serial.println(":" + WiFi.hostname());
     }
     Serial.print("> ");
+}
+
+bool _mqttConnect() {
+    unsigned long   to = millis();
+    PilotLED.Start(200, 100);
+    while (!mqttClient.connect(mqttClientID.c_str(), mqttAuth.c_str(), mqttPassword.c_str())) {
+        if (millis() - to > 60000) {
+            break;
+        }
+        Serial.print('.');
+        delay(500);
+    }
+    Serial.println();
+    PilotLED.Start(800, 600);
+    return mqttClient.connected();
+}
+
+bool _mqttIncomming() {
+    if (!mqttClient.connected()) {
+        Serial.print("[info] mqtt server disconnected, reconnect ");
+        if (_mqttConnect())
+            Serial.println("OK");
+        else
+            Serial.println("failed.");
+    }
+    return mqttClient.loop();
+}
+
+void _mqttSubscribe(char* topic, byte* payload, unsigned int length) {
+    Serial.println("[info] mqtt topic:" + String(topic));
+    Serial.println("[info] mqtt payload(" + String(length) + "):");
+    uint16_t cl = 0;
+    while (length > 0) {
+        uint16_t c = cl;
+        uint16_t xc = cl;
+        Serial.printf("%03x ", cl);
+        while (c < (length > 16 ? 16 : length)) {
+            Serial.printf(" %02x", payload[c++]);
+            cl++;
+        }
+        Serial.print("  ");
+        for (uint16_t ix = xc; ix < xc + c; ix++) {
+            char dc = payload[ix];
+            if (iscntrl((int)dc))
+                dc = '.';
+            Serial.print(dc);
+        }
+        length -= c;
+        Serial.println();
+    }
 }
 
 void mqtt() {
@@ -715,56 +773,6 @@ void mqtt() {
     Serial.print("> ");
 }
 
-bool _mqttConnect() {
-    unsigned long   to = millis();
-    PilotLED.Start(200, 100);
-    while (!mqttClient.connect(mqttClientID.c_str(), mqttAuth.c_str(), mqttPassword.c_str())) {
-        if (millis() - to > 60000) {
-            break;
-        }
-        Serial.print('.');
-        delay(500);
-    }
-    Serial.println();
-    PilotLED.Start(800, 600);
-    return mqttClient.connected();
-}
-
-bool _mqttIncomming() {
-    if (!mqttClient.connected()) {
-        Serial.print("[info] mqtt server disconnected, reconnect ");
-        if (_mqttConnect())
-            Serial.println("OK");
-        else
-            Serial.println("failed.");
-    }
-    return mqttClient.loop();
-}
-
-void _mqttSubscribe(char* topic, byte* payload, unsigned int length) {
-    Serial.println("[info] mqtt topic:" + String(topic));
-    Serial.println("[info] mqtt payload(" + String(length) + "):");
-    uint16_t cl = 0;
-    while (length > 0) {
-        uint16_t c = cl;
-        uint16_t xc = cl;
-        Serial.printf("%03x ", cl);
-        while (c < (length > 16 ? 16 : length)) {
-            Serial.printf(" %02x", payload[c++]);
-            cl++;
-        }
-        Serial.print("  ");
-        for (uint16_t ix = xc; ix < xc + c; ix++) {
-            char dc = payload[ix];
-            if (iscntrl((int)dc))
-                dc = '.';
-            Serial.print(dc);
-        }
-        length -= c;
-        Serial.println();
-    }
-}
-
 void ping() {
     IPAddress rmIP;
     String remoteHost = String(Cmd.next());
@@ -868,6 +876,18 @@ void setSleep() {
     Serial.print("> ");
 }
 
+String toMacAddress(const uint8_t mac[]) {
+    String  macAddr = "";
+    for (uint8_t i = 0; i < 6; i++) {
+        char  buf[3];
+        sprintf(buf, "%02X", mac[i]);
+        macAddr += buf;
+        if (i < 5)
+            macAddr += ':';
+    }
+    return macAddr;
+}
+
 void setWiFiMode() {
     char*	c_mode = Cmd.next();
     String	mode = (c_mode);
@@ -899,6 +919,27 @@ void setWiFiMode() {
     Serial.println(")");
     Serial.println(t ? "OK" : "Fail");
     Serial.print("> ");
+}
+
+void showWiFiMode() {
+    Serial.print("WiFi.mode(");
+    switch (wifi_get_opmode()) {
+    case WIFI_STA:
+        Serial.print("STA");
+        break;
+    case WIFI_AP:
+        Serial.print("AP");
+        break;
+    case WIFI_AP_STA:
+        Serial.print("AP_STA");
+        break;
+    case WIFI_OFF:
+        Serial.print("OFF");
+        break;
+    default:
+        Serial.print("?");
+    }
+    Serial.println(")");
 }
 
 void showConfig() {
@@ -992,27 +1033,6 @@ void showStatus() {
     Serial.print("> ");
 }
 
-void showWiFiMode() {
-    Serial.print("WiFi.mode(");
-    switch (wifi_get_opmode()) {
-    case WIFI_STA:
-        Serial.print("STA");
-        break;
-    case WIFI_AP:
-        Serial.print("AP");
-        break;
-    case WIFI_AP_STA:
-        Serial.print("AP_STA");
-        break;
-    case WIFI_OFF:
-        Serial.print("OFF");
-        break;
-    default:
-        Serial.print("?");
-    }
-    Serial.println(")");
-}
-
 void smartConfig() {
     if (wifi_get_opmode() != WIFI_STA) {
         Serial.println("[warning] WIFI_STA not available.");
@@ -1071,13 +1091,13 @@ void softAP() {
                 yield();
                 delay(100);
             }
-#ifdef defined(ARDUINO_ESP8266_RELEASE_2_4_0) || defined(ARDUINO_ESP8266_RELEASE_2_4_1)
-            // This callback is available only esp8266 core 2.4.0
+#if defined(ARDUINO_ESP8266_RELEASE_2_4_0) || defined(ARDUINO_ESP8266_RELEASE_2_4_1) || defined(ARDUINO_ESP8266_RELEASE_2_4_2)
+            // This callback is available only esp8266 core 2.4.x
             WiFi.onSoftAPModeStationConnected([](const WiFiEventSoftAPModeStationConnected& e) {
                 Serial.println();
                 Serial.println("Station:<" + toMacAddress(e.mac) + "> connected");
                 Serial.print("> "); });
-            // This callback is available only esp8266 core 2.4.0
+            // This callback is available only esp8266 core 2.4.x
             WiFi.onSoftAPModeStationDisconnected([](const WiFiEventSoftAPModeStationDisconnected& e) {
                 Serial.println();
                 Serial.println("Station:<" + toMacAddress(e.mac) + "> disconnected");
@@ -1233,18 +1253,6 @@ void stopServer() {
         Serial.println("Unknown server");
     }
     Serial.print("> ");
-}
-
-String toMacAddress(const uint8_t mac[]) {
-    String	macAddr = "";
-    for (uint8_t i = 0; i < 6; i++) {
-        char	buf[3];
-        sprintf(buf, "%02X", mac[i]);
-        macAddr += buf;
-        if (i < 5)
-            macAddr += ':';
-    }
-    return macAddr;
 }
 
 static const char* httpHeaders[] PROGMEM = {

@@ -9,9 +9,7 @@ cache:
         - "~/.platformio"
 
 env:
-    global:
-        - PLATFORMIO_CI_SRC=./ESPShaker
-        - build_flags=-D NO_EXTRA_4K_HEAP
+    - PLATFORMIO_CI_SRC=./ESPShaker PLATFORMIO_BUILD_FLAGS="-D NO_EXTRA_4K_HEAP"
 
 install:
     - pip install -U platformio

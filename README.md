@@ -398,10 +398,11 @@ Enter `help` or `?` will display commands list.
 22. **softap**  
    Start SoftAP operation.
    ```
-   softap SSID PASSPHRASE
+   softap SSID PASSPHRASE CHANNEL
    ```
    `SSID` : Specify SSID for SoftAP.  
    `PASSPHRASE` : Specify Passphrase for the SSID.
+   `CHANNEL` : Specify the channel.
 
 23. **start**  
     Start Web server, DNS server, mDNS service.

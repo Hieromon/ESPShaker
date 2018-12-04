@@ -12,6 +12,7 @@
 #include <functional>
 #include <stdio.h>
 #include <ctype.h>
+#include <core_version.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <DNSServer.h>
@@ -197,10 +198,10 @@ void beginWiFi() {
 void beginWPS() {
     Serial.println("WiFi.beginWPSConfig");
 #if defined(ARDUINO_ESP8266_RELEASE_2_4_2)
-#ifndef NO_EXTRA_4K_HEAP
-    Serial.println("It needs core of NO_EXTRA_4K_HEAP configuration.");
-#else
+#if defined(NO_EXTRA_4K_HEAP)
     Serial.println(WiFi.beginWPSConfig() ? "OK" : "Fail");
+#else
+    Serial.println("It needs core of NO_EXTRA_4K_HEAP configuration.");
 #endif
 #else
     Serial.println(WiFi.beginWPSConfig() ? "OK" : "Fail");
@@ -222,8 +223,12 @@ void disconnWiFi() {
     }
     else {
         if (ap == "ap") {
-            Serial.println("WiFi.softAPdisconnect");
-            Serial.println(WiFi.softAPdisconnect() ? "OK" : "Fail");
+            bool wifiDown = false;
+            String  sw = String(Cmd.next());
+            if (sw == "off")
+                wifiDown = true;
+            Serial.println("WiFi.softAPdisconnect(" + (wifiDown ? String("true") : String("false")) + String(")"));
+            Serial.println(WiFi.softAPdisconnect(wifiDown) ? "OK" : "Fail");
         }
     }
     Serial.print("> ");
@@ -1082,8 +1087,14 @@ void softAP() {
         String	pass = String(c_pass);
         if (pass.length())
             Serial.print("," + pass);
+        char* c_ch = Cmd.next();
+        String  ch = String(c_ch);
+        if (ch.length() <= 0)
+            ch = "1";
+        else
+            Serial.print("," + ch);
         Serial.println(")");
-        if (WiFi.softAP(ssid.c_str(), pass.c_str())) {
+        if (WiFi.softAP(ssid.c_str(), pass.c_str(), ch.toInt())) {
             unsigned long ts = millis();
             while (WiFi.softAPIP() == IPAddress(0, 0, 0, 0)) {
                 if (millis() - ts > 5000)
@@ -1483,7 +1494,7 @@ static const commandS	commands[] = {
     { "sleep", "none|light|modem|{deep SLEEP_TIME}", setSleep },
     { "smartconfig", "start|stop|done", smartConfig },
     { "show", "", showConfig },
-    { "softap", "{SSID [PASSPHRASE]}|discon", softAP },
+    { "softap", "{SSID [PASSPHRASE] [CHANNEL]}|discon", softAP },
     { "start", "web|{dns [DOMAIN]}|{mdns HOST_NAME SERVICE PROTOCOL [PORT]}", startServer },
     { "station", "", station },
     { "status", "", showStatus },

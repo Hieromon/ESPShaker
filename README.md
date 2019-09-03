@@ -463,6 +463,9 @@ ESP8266 UART RX buffer size is 128 bytes also ESPShaker has 128 bytes command bu
 
 ### Change log
 
+#### [1.4] 2019-09-03
+- Suppors **erase** operand with **config** command.
+
 #### [1.3.3] 2018-11-28
 - Suppors ESP8266 Arduino core release 2.4.2
 

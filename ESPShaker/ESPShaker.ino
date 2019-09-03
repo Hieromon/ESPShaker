@@ -31,7 +31,7 @@ extern "C" {
 extern "C" uint32_t _SPIFFS_start;
 extern "C" uint32_t _SPIFFS_end;
 
-#define _VERSION    "1.3.3"
+#define _VERSION    "1.4"
 
 class httpHandler : public RequestHandler {
 public:
@@ -1432,6 +1432,12 @@ void wifiConfig() {
         Serial.println(")");
         Serial.println(WiFi.config(stationIP, stationGW, stationNM, stationDNS1, stationDNS2) ? "OK" : "Fail");
     }
+    else {
+        if (s_stationIP == "erase") {
+            Serial.println("ESP.eraseConfig");
+            Serial.println(ESP.eraseConfig() ? "OK" : "Fail");
+        }
+    }
     Serial.print("> ");
 }
 
@@ -1475,7 +1481,7 @@ static const commandS	commands[] = {
     { "apconfig", "[AP_IP] [GW_IP] [NETMASK]", softAPConfig },
     { "autoconnect", "on|off", autoConnect },
     { "begin", "[SSID [PASSPHRASE]] [#wait]", beginWiFi },
-    { "config", "IP GW [NETMASK] [DNS1] [DNS2]", wifiConfig },
+    { "config", "{IP GW [NETMASK] [DNS1] [DNS2]}|erase", wifiConfig },
     { "delay", "MILLISECONDS", doDelay },
     { "discon", "[ap]", disconnWiFi },
     { "eeprom", "{addr [ADDRESS]}|{clear BYTE LENGTH}|{write DATA}|{read LENGTH}", eeprom },

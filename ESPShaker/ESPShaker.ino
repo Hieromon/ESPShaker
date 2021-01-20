@@ -4,15 +4,15 @@
  *	they can be executed with interactive commands.
  *	@file	ESPShaker.ino
  *	@author	hieromon@gmail.com
- *	@version	1.3.3
- *	@date	2018-11-28
+ *	@version	1.4.1
+ *	@date	2020-01-20
  *	@copyright	MIT license.
  */
 
 #include <functional>
 #include <stdio.h>
 #include <ctype.h>
-#include <core_version.h>
+#include <core_esp8266_version.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <DNSServer.h>
@@ -31,7 +31,7 @@ extern "C" {
 extern "C" uint32_t _SPIFFS_start;
 extern "C" uint32_t _SPIFFS_end;
 
-#define _VERSION    "1.4"
+#define _VERSION    "1.4.1"
 
 class httpHandler : public RequestHandler {
 public:
@@ -101,7 +101,7 @@ bool    inSmartConfig = false;
 int     eepromAddress = 0;
 
 DNSServer       DnsServer;
-ESP8266WebServer    *WebServer = nullptr;
+ESP8266WebServer    *webServer = nullptr;
 HTTPClient      httpClient;
 httpHandler*    webHandler = nullptr;
 WiFiClientSecure    *wifiClientSec = nullptr;
@@ -116,6 +116,11 @@ int     mqttState;
 String  mqttTopic;
 
 String coreVersion;
+
+#if HAS_ESP8266_VERSION_NUMERIC
+WiFiEventHandler stationConnectedHandler;
+WiFiEventHandler stationDisconnectedHandler;
+#endif
 
 bool isNumber(String str) {
     uint8_t varLength = (uint8_t)str.length();
@@ -1073,6 +1078,20 @@ void smartConfig() {
     Serial.print("> ");
 }
 
+#if HAS_ESP8266_VERSION_NUMERIC
+void onStationConnected(const WiFiEventSoftAPModeStationConnected& e) {
+    Serial.println();
+    Serial.println("Station:<" + toMacAddress(e.mac) + "> connected");
+    Serial.print("> ");
+}
+
+void onStationDisconnected(const WiFiEventSoftAPModeStationDisconnected& e) {
+    Serial.println();
+    Serial.println("Station:<" + toMacAddress(e.mac) + "> disconnected");
+    Serial.print("> ");
+}
+#endif
+
 void softAP() {
     char*	c_ssid = Cmd.next();
     String	ssid(c_ssid);
@@ -1102,17 +1121,11 @@ void softAP() {
                 yield();
                 delay(100);
             }
-#if defined(ARDUINO_ESP8266_RELEASE_2_4_0) || defined(ARDUINO_ESP8266_RELEASE_2_4_1) || defined(ARDUINO_ESP8266_RELEASE_2_4_2)
-            // This callback is available only esp8266 core 2.4.x
-            WiFi.onSoftAPModeStationConnected([](const WiFiEventSoftAPModeStationConnected& e) {
-                Serial.println();
-                Serial.println("Station:<" + toMacAddress(e.mac) + "> connected");
-                Serial.print("> "); });
-            // This callback is available only esp8266 core 2.4.x
-            WiFi.onSoftAPModeStationDisconnected([](const WiFiEventSoftAPModeStationDisconnected& e) {
-                Serial.println();
-                Serial.println("Station:<" + toMacAddress(e.mac) + "> disconnected");
-                Serial.print("> "); });
+#if HAS_ESP8266_VERSION_NUMERIC
+            if (esp8266::coreVersionNumeric() >= 20500000) {
+              stationConnectedHandler = WiFi.onSoftAPModeStationConnected(&onStationConnected);
+              stationDisconnectedHandler = WiFi.onSoftAPModeStationDisconnected(&onStationDisconnected);
+            }
 #endif
             Serial.print("[info] softAPIP:");
             Serial.println(WiFi.softAPIP());
@@ -1150,15 +1163,15 @@ void startServer() {
     String	sType = String(s_type);
     sType.toLowerCase();
     if (sType == "web") {
-        Serial.println("WebServer.begin");
-        if (WebServer == nullptr) {
-            WebServer = new ESP8266WebServer(80);
+        Serial.println("webServer.begin");
+        if (webServer == nullptr) {
+            webServer = new ESP8266WebServer(80);
         }
         if (webHandler == nullptr) {
-            webHandler = new httpHandler(WebServer);
-            WebServer->addHandler(webHandler);
+            webHandler = new httpHandler(webServer);
+            webServer->addHandler(webHandler);
         }
-        WebServer->begin();
+        webServer->begin();
         Serial.println("OK");
     }
     else if (sType == "dns") {
@@ -1244,10 +1257,10 @@ void stopServer() {
     String	type = String(c_type);
     type.toLowerCase();
     if (type == "web") {
-        if (WebServer != nullptr) {
+        if (webServer != nullptr) {
             Serial.println("Stop web server");
-            delete WebServer;
-            WebServer = nullptr;
+            delete webServer;
+            webServer = nullptr;
             webHandler = nullptr;
             Serial.println("OK");
         }
@@ -1363,10 +1376,10 @@ void http() {
     }
     else if (req == "on") {
         if (webHandler == nullptr) {
-            if (WebServer == nullptr)
-                WebServer = new ESP8266WebServer(80);
-            webHandler = new httpHandler(WebServer);
-            WebServer->addHandler(webHandler);
+            if (webServer == nullptr)
+                webServer = new ESP8266WebServer(80);
+            webHandler = new httpHandler(webServer);
+            webServer->addHandler(webHandler);
         }
         String	uri = String(Cmd.next());
         Serial.print("ON ");
@@ -1391,7 +1404,7 @@ void http() {
                     page = new PageBuilder();
                     page->setUri(c_uriPool);
                     page->addElement(*content);
-                    page->insert(*WebServer);
+                    page->insert(*webServer);
                     Serial.print(' ');
                     Serial.println(c_contentPool);
                 }
@@ -1579,8 +1592,8 @@ void loop() {
 
     if (onDnsserver)
         DnsServer.processNextRequest();
-    if (WebServer != nullptr)
-        WebServer->handleClient();
+    if (webServer != nullptr)
+        webServer->handleClient();
 
     if (mqttTopic.length())
         _mqttIncomming();

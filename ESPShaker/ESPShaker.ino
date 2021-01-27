@@ -4,11 +4,11 @@
  *	they can be executed with interactive commands.
  *	@file	ESPShaker.ino
  *	@author	hieromon@gmail.com
- *	@version	1.4.1
- *	@date	2020-01-20
+ *	@version	1.4.2
+ *	@date	2021-01-26
  *	@copyright	MIT license.
  */
-
+// #define USE_SPIFFS
 #include <functional>
 #include <stdio.h>
 #include <ctype.h>
@@ -18,9 +18,14 @@
 #include <DNSServer.h>
 #include <ESP8266mDNS.h>
 #include <ESP8266HTTPClient.h>
+#include <WiFiClient.h>
 #include <ESP8266Ping.h>
 #include <EEPROM.h>
+#ifdef USE_SPIFFS
 #include <FS.h>
+#else
+#include <LittleFS.h>
+#endif
 #include <PubSubClient.h>
 #include "PseudoPWM.h"
 #include "SerialCommand.h"
@@ -28,10 +33,15 @@
 extern "C" {
     #include <user_interface.h>
 }
+#ifdef USE_SPIFFS
 extern "C" uint32_t _SPIFFS_start;
 extern "C" uint32_t _SPIFFS_end;
+FS& FlashFS = SPIFFS;
+#else
+FS& FlashFS = LittleFS;
+#endif
 
-#define _VERSION    "1.4.1"
+#define _VERSION    "1.4.2"
 
 class httpHandler : public RequestHandler {
 public:
@@ -434,30 +444,35 @@ void fileSystem() {
     if (op == "start" || op == "stop" || op == "dir" || op == "file" || op == "format" || op == "info" || op == "remove" || op == "rename") {
         PilotLED.Start(200, 100);
         FSInfo  fsInfo;
+#ifdef USE_SPIFFS
+        String  fsName = "SPIFFS ";
+#else
+        String  fsName = "LittleFS ";
+#endif
         Serial.println(String("fs ") + op);
         if (op == "start") {
-            Serial.print("SPIFFS ");
-            if (SPIFFS.begin()) {
-                SPIFFS.info(fsInfo);
+            Serial.print(fsName);
+            if (FlashFS.begin()) {
+                FlashFS.info(fsInfo);
                 Serial.println("mounted. " + String(fsInfo.totalBytes) + " bytes/" + String(fsInfo.usedBytes) + " used.");
             }
             else { Serial.println("could not start."); }
         }
         else if (op == "stop") {
-            Serial.println("SPIFFS " + op);
-            SPIFFS.end();
+            Serial.println(fsName + op);
+            FlashFS.end();
             Serial.println("OK");
         }
         else if (op == "format") {
-            Serial.println("SPIFFS " + op);
-            Serial.println(SPIFFS.format() ? "OK" : "Fail");
+            Serial.println(fsName + op);
+            Serial.println(FlashFS.format() ? "OK" : "Fail");
         }
         else {
-            if (SPIFFS.info(fsInfo)) {
+            if (FlashFS.info(fsInfo)) {
                 if (op == "dir") {
                     Serial.println("Dir:");
                     uint16_t    fn = 0;
-                    Dir dir = SPIFFS.openDir("/");
+                    Dir dir = FlashFS.openDir("/");
                     while (dir.next()) {
                         fn++;
                         Serial.print(String(fn) + ":" + dir.fileName() + " ");
@@ -467,7 +482,7 @@ void fileSystem() {
                     }
                 }
                 else if (op == "info") {
-                    Serial.println("FS:");
+                    Serial.println("FS:" + fsName);
                     Serial.println("Size:" + String(fsInfo.totalBytes));
                     Serial.println("Used:" + String(fsInfo.usedBytes));
                     Serial.println("Block size:" + String(fsInfo.blockSize));
@@ -482,10 +497,10 @@ void fileSystem() {
                         if (path.charAt(0) != '/')
                             path = String("/") + path;
                         Serial.print(path + ":");
-                        if (SPIFFS.exists(path)) {
+                        if (FlashFS.exists(path)) {
                             if (op == "file") {
                                 char buff[128] = { 0 };
-                                File f = SPIFFS.open(path, "r");
+                                File f = FlashFS.open(path, "r");
                                 if (f) {
                                     int fileSize = f.size();
                                     Serial.println(String(fileSize) + "bytes");
@@ -504,15 +519,15 @@ void fileSystem() {
                             }
                             else if (op == "remove") {
                                 Serial.println();
-                                Serial.print(SPIFFS.remove(path) ? "OK" : "Fail");
+                                Serial.print(FlashFS.remove(path) ? "OK" : "Fail");
                             }
                             else if (op == "rename") {
                                 const char* c_newPath = Cmd.next();
                                 if (c_newPath) {
                                     String newPath = String(c_newPath);
-                                    if (!SPIFFS.exists(newPath)) {
+                                    if (!FlashFS.exists(newPath)) {
                                         Serial.println("-> " + newPath);
-                                        Serial.print(SPIFFS.rename(path, newPath) ? "OK" : "Fail");
+                                        Serial.print(FlashFS.rename(path, newPath) ? "OK" : "Fail");
                                     }
                                     else { Serial.print("[error] file already exists."); }
                                 }
@@ -528,7 +543,7 @@ void fileSystem() {
         }
         PilotLED.Start(800, 600);
     }
-    Serial.print(" >");
+    Serial.print("> ");
 }
 
 void freeHeap() {
@@ -1012,8 +1027,10 @@ void showConfig() {
     default:
         Serial.println();
     }
+#ifdef USE_SPIFFS
     Serial.println("SPIFFS size:" + String((uint32_t)&_SPIFFS_end - (uint32_t)&_SPIFFS_start));
     Serial.println("EEPROM offset:" + String((uint32_t)&_SPIFFS_end - 0x40200000, HEX));
+#endif
     Serial.println("Free heap:" + String(ESP.getFreeHeap()));
     Serial.print("> ");
 }
@@ -1345,7 +1362,9 @@ void http() {
         Serial.print("GET ");
         Serial.println(url);
         PilotLED.Start(200, 100);
-        if (httpClient.begin(url)) {
+        if (wifiClient == nullptr)
+            wifiClient = new WiFiClient;
+        if (httpClient.begin(*wifiClient, url)) {
             httpClient.collectHeaders(httpHeaders, sizeof(httpHeaders) / sizeof(const char*));
             int code = httpClient.GET();
             Serial.println(String(code) + ':');

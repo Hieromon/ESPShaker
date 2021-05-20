@@ -23,7 +23,7 @@ Since ESPShaker does not use the [AT SDK](http://espressif.com/en/support/downlo
 ### Works on
 
 It has tested on NodeMCU v1.0 module (ESP-12E). Other ESP8266 modules will also work, but its sketch size exceeds 370KB. It may not work on prior modules such as ESP-01.  
-Required [Arduino IDE](http://www.arduino.cc/en/main/software) is current upstream at **the 1.8 level or later**, and also [ESP8266 Arduino core 2.3.0](https://github.com/esp8266/Arduino).
+Required [Arduino IDE](http://www.arduino.cc/en/main/software) is current upstream at **the 1.8 level or later**, and also [ESP8266 Arduino core 3.0.0](https://github.com/esp8266/Arduino).
 
 ### Installation
 
@@ -462,6 +462,9 @@ Executed as follows.
 ESP8266 UART RX buffer size is 128 bytes also ESPShaker has 128 bytes command buffer. The USB Serial bridge interface fetches the contents of the received packet to the hardware buffer all at once. But ESP8266 SDK does not support hardware flow control and RX interrupt can not be properly controlled from the sketch. So at this way, a whole sending data may not be received.
 
 ### Change log
+
+#### [1.4.3] 2021-05-20
+- Suppors ESP8266 arduino core 3.0.0.
 
 #### [1.4.2] 2021-01-26
 - Suppors LittleFS filesystem

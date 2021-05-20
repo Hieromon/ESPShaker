@@ -13,10 +13,10 @@ before_install:
   - export PATH=~/arduino-ide:$PATH
   - arduino --pref "boardsmanager.additional.urls=http://arduino.esp8266.com/stable/package_esp8266com_index.json" --save-prefs
   - arduino --install-library PubSubClient,PageBuilder
-  - wget https://github.com/Hieromon/PseudoPWM/archive/refs/heads/master.zip -O /tmp/PseudoPWM/.
-  - unzip /tmp/PseudoPWM/PseudoPWM-master.zip -d ~/Arduino/libraries/PseudoPWM
-  - wget https://github.com/dancol90/ESP8266Ping/archive/refs/heads/master.zip -O /tmp/ESP8266Ping/.
-  - unzip /tmp/ESP8266Ping/ESP8266Ping-master.zip -d ~/Arduino/libraries/ESP8266Ping
+  - wget https://github.com/Hieromon/PseudoPWM/archive/refs/heads/master.zip -O /tmp/PseudoPWM-master.zip
+  - unzip /tmp/PseudoPWM-master.zip -d ~/Arduino/libraries/PseudoPWM
+  - wget https://github.com/dancol90/ESP8266Ping/archive/refs/heads/master.zip -O /tmp/ESP8266Ping-master.zip
+  - unzip /tmp/ESP8266Ping-master.zip -d ~/Arduino/libraries/ESP8266Ping
 install:
   - mkdir -p ~/Arduino/libraries
   - ln -s $PWD ~/Arduino/libraries/.

@@ -27,9 +27,9 @@
 #include <LittleFS.h>
 #endif
 #include <PubSubClient.h>
-#include "PseudoPWM.h"
+#include <PseudoPWM.h>
+#include <PageBuilder.h>
 #include "SerialCommand.h"
-#include "PageBuilder.h"
 extern "C" {
     #include <user_interface.h>
 }
@@ -41,14 +41,14 @@ FS& FlashFS = SPIFFS;
 FS& FlashFS = LittleFS;
 #endif
 
-#define _VERSION    "1.4.2"
+#define _VERSION    "1.4.3"
 
 class httpHandler : public RequestHandler {
 public:
     httpHandler(ESP8266WebServer* server) : _lordServer(server) {};
     ~httpHandler() { _lordServer = nullptr; };
 
-    bool canHandle(HTTPMethod method, String uri) override {
+    bool canHandle(HTTPMethod method, PageBuilderUtil::URI_TYPE_SIGNATURE uri) override {
         Serial.println();
         Serial.print(_lordServer->client().localIP());
         Serial.print(" http request:");
@@ -83,7 +83,7 @@ public:
         return false;
     }
 
-    bool canUpload(String uri) override {
+    bool canUpload(PageBuilderUtil::URI_TYPE_SIGNATURE uri) override {
         Serial.println("http upload request:" + uri);
         Serial.print("> ");
         return false;

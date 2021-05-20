@@ -4,8 +4,8 @@
  *	they can be executed with interactive commands.
  *	@file	ESPShaker.ino
  *	@author	hieromon@gmail.com
- *	@version	1.4.2
- *	@date	2021-01-26
+ *	@version	1.4.3
+ *	@date	2021-05-20
  *	@copyright	MIT license.
  */
 // #define USE_SPIFFS

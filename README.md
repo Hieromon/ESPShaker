@@ -1,5 +1,5 @@
 ## ESPShaker
-*ESP8266 interactive serial command processor via Arduino core.* [![Build Status](https://travis-ci.org/Hieromon/ESPShaker.svg?branch=master)](https://travis-ci.org/Hieromon/ESPShaker)   
+*ESP8266 interactive serial command processor via Arduino core.* [![Build Status](https://travis-ci.com/Hieromon/ESPShaker.svg?branch=master)](https://travis-ci.com/Hieromon/ESPShaker)   
 **MQTT client and EEPROM access are available in version 1.1 or later.**
 
 It is implemented several APIs provided by ESP8266 arduino core so that they can be executed with interactive commands. You can control esp8266 interactively with the command via serial interface. With ESPShaker you can investigate the behavior of ESP8266, without having to write program code every time.  

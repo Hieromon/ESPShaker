@@ -12,7 +12,7 @@ before_install:
   - sudo mv arduino-$IDE_VERSION ~/arduino-ide
   - export PATH=~/arduino-ide:$PATH
   - arduino --pref "boardsmanager.additional.urls=http://arduino.esp8266.com/stable/package_esp8266com_index.json" --save-prefs
-  - arduino --install-library PubSubClient,PageBuilder,PseudoPWM,ESP8266Ping_source
+  - arduino --install-library PubSubClient,PageBuilder,PseudoPWM,ESP8266Ping
 install:
   - mkdir -p ~/Arduino/libraries
   - ln -s $PWD ~/Arduino/libraries/.

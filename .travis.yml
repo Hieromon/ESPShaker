@@ -13,7 +13,7 @@ env:
   - PLATFORMIO_CI_SRC=./ESPShaker PLATFORMIO_BUILD_FLAGS="-D NO_EXTRA_4K_HEAP"
 
 install:
-  - pio install -U platformio
+  - pip install -U platformio
   - pio update
 
   - wget https://github.com/Hieromon/PageBuilder/archive/master.zip -O /tmp/PageBuilder_source.zip

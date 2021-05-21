@@ -1,22 +1,33 @@
-language: generic
+language: python
+python:
+  - "3.7"
+
+# Cache PlatformIO packages using Travis CI container-based infrastructure
+sudo: false
+cache:
+  directories:
+    - "~/.platformio"
+    - $HOME/.cache/pip
+
 env:
-  global:
-    - IDE_VERSION=1.8.13
-    - BOARD="esp8266:esp8266:generic:xtal=80,eesz=4M3M,ip=lm2f,exception=disabled,FlashMode=qio,FlashFreq=80"
-before_install:
-  - "/sbin/start-stop-daemon --start --quiet --pidfile /tmp/custom_xvfb_1.pid --make-pidfile --background --exec /usr/bin/Xvfb -- :1 -ac -screen 0 1280x1024x16"
-  - sleep 3
-  - export DISPLAY=:1.0
-  - wget http://downloads.arduino.cc/arduino-$IDE_VERSION-linux64.tar.xz
-  - tar xf arduino-$IDE_VERSION-linux64.tar.xz
-  - sudo mv arduino-$IDE_VERSION ~/arduino-ide
-  - export PATH=~/arduino-ide:$PATH
-  - arduino --pref "boardsmanager.additional.urls=http://arduino.esp8266.com/stable/package_esp8266com_index.json" --save-prefs
+  - PLATFORMIO_CI_SRC=./ESPShaker PLATFORMIO_BUILD_FLAGS="-D NO_EXTRA_4K_HEAP"
+
 install:
-  - arduino --install-library PubSubClient,PageBuilder
-  - wget https://github.com/Hieromon/PseudoPWM/archive/refs/heads/master.zip -O /tmp/PseudoPWM-master.zip
-  - unzip /tmp/PseudoPWM-master.zip -d ~/Arduino/libraries
-  - wget https://github.com/dancol90/ESP8266Ping/archive/refs/heads/master.zip -O /tmp/ESP8266Ping-master.zip
-  - unzip /tmp/ESP8266Ping-master.zip -d ~/Arduino/libraries
+  - pio install -U platformio
+  - pio update
+
+  - wget https://github.com/Hieromon/PageBuilder/archive/master.zip -O /tmp/PageBuilder_source.zip
+  - unzip /tmp/PageBuilder_source.zip -d /tmp
+
+  - wget https://github.com/Hieromon/PseudoPWM/archive/master.zip -O /tmp/PseudoPWM_source.zip
+  - unzip /tmp/PseudoPWM_source.zip -d /tmp
+
+  - wget https://github.com/knolleary/pubsubclient/archive/master.zip -O /tmp/pubsubclient_source.zip
+  - unzip /tmp/pubsubclient_source.zip -d /tmp
+
+  - wget https://github.com/dancol90/ESP8266Ping/archive/master.zip -O /tmp/ESP8266Ping_source.zip
+  - unzip /tmp/ESP8266Ping_source.zip -d /tmp
+
 script:
-  - arduino --verify --board $BOARD $PWD/ESPShaker/ESPShaker.ino
+  - platformio ci --lib="." --lib="/tmp/PageBuilder-master" --lib="/tmp/PseudoPWM-master" --lib="/tmp/pubsubclient-master" --lib="/tmp/ESP8266Ping-master" --board=nodemcuv2
+
